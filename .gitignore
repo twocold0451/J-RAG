@@ -4,9 +4,6 @@
 *.war
 *.class
 
-# Node.js/Frontend
-/frontend/
-
 # IDE-specific files
 .idea/
 .vscode/
@@ -25,5 +22,3 @@ logs/
 # OS-specific files
 .DS_Store
 Thumbs.db
-
-#/resume/
