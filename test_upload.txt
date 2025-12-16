@@ -1,3 +1,0 @@
-This is a test document for the RAG system.
-It contains some sample text to verify the ingestion process.
-The RAG system should be able to chunk and index this content.
