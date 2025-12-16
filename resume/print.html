@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>李国庆的简历</title>
+    <link rel="shortcut icon" href="favicon.ico">
+    <link rel="stylesheet" href="print.min.css">
+    <link rel="stylesheet" href="fontello.min.css">
+
+    <style>
+        .title {
+            margin: 0px;
+        }
+
+        .sub_ul {
+            padding-left: 2em;
+        }
+
+        .sub_ul>li {
+            list-style-type: disc;
+        }
+
+        .explanation {
+            background-color: #c3c3c5;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        a {
+            cursor: pointer;
+        }
+
+        .main {
+            margin: auto;
+        }
+    </style>
+    <script src="https://cdn.staticfile.org/jquery/3.4.1/jquery.js"></script>
+    <script type="application/javascript">
+        $(document).ready(function () {
+            $(".explanation_btn").click(function () {
+                $(this).parent().find(".explanation").slideToggle("1000");
+            });
+        });
+    </script>
+</head>
+
+<body style="">
+
+
+    <div class="main">
+        <div class="title">
+
+            <h1>李国庆的简历</h1>
+
+        </div>
+        <ul class="main-info">
+            <li class="someRight">
+                <dt><i class="icon-bookmark"></i>基本信息</dt>
+                <dd>
+                    <span>个人信息:</span> 李国庆 / 男 / 1991 / 10年+开发经验 &nbsp;&nbsp;&nbsp;&nbsp;
+                    <span>教育经历:</span> 黑龙江大学 / 本科
+                </dd>
+                <dd>
+                    <span>英语水平:</span> CET-4 &nbsp;&nbsp;&nbsp;&nbsp;
+                    <span>邮箱:</span> 478744551@qq.com &nbsp;&nbsp;&nbsp;&nbsp;
+                    <span>电话:</span> 18072573453
+                </dd>
+            </li>
+            <li class="someRight">
+                <dt><i class="icon-bookmark"></i>求职意向</dt>
+                <dd>
+                    <span>职位:</span> Java高级开发工程师 / 后端架构师 &nbsp;&nbsp;&nbsp;&nbsp;
+                    <span>方向:</span> 微服务架构 / AI 应用落地 &nbsp;&nbsp;&nbsp;&nbsp;
+                    <span>期望薪资:</span> 面议
+                </dd>
+            </li>
+        </ul>
+
+        <ul class="main-info">
+            <li>
+                <dt><i class="icon-bookmark"></i>专业摘要</dt>
+                <ul class="exp">
+                    <li>10年 Java 后端/微服务开发经验，参与多个企业级核心系统的架构设计与实施。</li>
+                    <li>熟练掌握 Spring Boot / Spring Cloud 及分布式架构，擅长多租户设计、服务治理与性能调优。</li>
+                    <li>具备完整的 AI 应用实战经验，从 0 到 1 搭建了基于 RAG 的知识库问答系统。</li>
+                    <li>多次参与核心系统重构和稳定性建设，显著提升系统可用性，具备出色的问题定位与跨团队协作能力。</li>
+                </ul>
+            </li>
+            <li>
+                <dt><i class="icon-bookmark"></i>技能清单</dt>
+                <ul class="exp">
+                    <li>
+                        <p><strong>编程语言与框架:</strong> 熟练使用 Java、Spring Boot、Spring Cloud、MyBatis，掌握高并发与多线程编程。</p>
+                        <p><strong>微服务与架构:</strong> 熟练使用 Nacos、Spring Cloud Gateway、OpenFeign、Sentinel，具备多租户架构设计与落地经验。
+                        </p>
+                        <p><strong>AI 与智能应用:</strong> 熟练使用 LangChain4j 搭建 RAG 系统，掌握向量检索（pgvector）、文档切分、Embedding
+                            生成与大模型集成。</p>
+                        <p><strong>数据库与缓存:</strong> 熟练 MySQL 设计与 SQL 优化，掌握 Redis 在缓存、分布式锁、布隆过滤器等场景的应用。</p>
+                        <p><strong>中间件与基础设施:</strong> RocketMQ、Docker、Linux、Maven、Git，具备基于 Docker Compose 的一键部署实践。</p>
+                        <p><strong>其他:</strong> Solr 搜索引擎、WebSocket 实时通信、爬虫技术、工作流引擎等。</p>
+                    </li>
+                </ul>
+            </li>
+            <li>
+                <dt><i class="icon-bookmark"></i>主要项目与工作经验</dt>
+
+                <h3>个人项目 - Qarag AI 智能文档问答系统 (近期)</h3>
+                <ul class="exp">
+                    <li>
+                        <div class="circle"></div>
+                        <h4>基于 RAG 的知识库问答系统（<a href="https://qarag.2morning.cc/"
+                                target="_blank">https://qarag.2morning.cc/</a>）</h4>
+                        <ul class="sub_ul">
+                            <li><strong>系统架构</strong>: 设计并开发了前后端分离的 RAG 知识库系统。后端基于 Spring Boot 3.2 + LangChain4j 构建,前端采用
+                                React 19 + Vite + TailwindCSS + DaisyUI,实现了现代化的响应式交互体验。</li>
+                            <li><strong>核心 RAG 引擎</strong>: 基于 PostgreSQL + pgvector
+                                实现高性能向量检索。设计双层策略模式的文档切分架构，第一层按文件格式（Markdown/PDF/Code）选择切分器，第二层在 PDF
+                                内部按页面元素类型（文本/表格/图片/扫描件）选择不同处理策略。</li>
+                            <li><strong>PDF 智能解析</strong>: 集成 Apache PDFBox 提取文本，Tabula 自动检测并提取表格转 Markdown，接入视觉模型实现扫描件
+                                OCR 与图表语义理解，通过处理器间区域协调机制避免内容重复提取。</li>
+                            <li><strong>工程化实践</strong>: 采用 Flyway 实现数据库版本自动化迁移，配合 Docker Compose 实现一键环境部署。</li>
+                        </ul>
+                    </li>
+                </ul>
+                <h3>渝化工科技有限公司（2022.09 - 2025.05）</h3>
+                <ul class="exp">
+                    <li>
+                        <div class="circle"></div>
+                        <h4>物流收发运管理系统 (核心开发)</h4>
+                        <ul class="sub_ul">
+                            <li><strong>主导 SaaS 架构设计</strong>: 针对多厂区差异化痛点，设计"核心通用+工厂定制"的模块化隔离架构，主导完成从单体向 Spring Cloud
+                                Alibaba
+                                多租户 SaaS 平台的重构，支撑 8+ 厂区业务接入。</li>
+                            <li><strong>构建服务治理体系</strong>: 设计基于 ThreadLocal
+                                的全链路租户上下文透传方案，彻底解决多租户数据隔离安全问题。</li>
+                            <li><strong>异步与调度体系</strong>: 引入 RocketMQ 实现核心业务链路异步解耦与削峰填谷，部署 XXL-JOB
+                                统一管理分布式定时任务，显著提升了系统的吞吐量与稳定性。
+                            </li>
+                            <li><strong>高并发数据清洗</strong>: 面对海量运单同步场景，基于 Hibernate Validator 自定义 @EnumValue 声明式校验，在
+                                Controller
+                                入口层对无效数据进行拦截，有效保护下游业务系统。</li>
+                            <li><strong>构建开放生态</strong>: 负责 OpenAPI 网关建设，集成 Jasypt 实现配置加密，制定基于 OAuth2
+                                的统一鉴权标准，极大降低了第三方上下游企业的接入成本。</li>
+                        </ul>
+                    </li>
+                </ul>
+                <h3>中经网数据有限公司（2019.07 - 2022.03）</h3>
+                <ul class="exp">
+                    <li>
+                        <div class="circle"></div>
+                        <h4>城市信用评价数据处理平台 (核心开发)</h4>
+                        <ul class="sub_ul">
+                            <li>为700+城市提供数据清洗、实时计算、报告生成的闭环服务，支撑国家发改委信用监测。</li>
+                            <li>重构千万级数据入库链路，解决性能瓶颈。引入Spring Batch进行分片处理，根据不同数据情况结合Redis布隆过滤器实现高效去重入库，将全量同步耗时从6小时压缩至40分钟。
+                            </li>
+                            <li>设计开发自动化报告生成模块，实现报告模板解析、数据填充与多格式输出，支持700份报告并发导出。</li>
+                        </ul>
+                    </li>
+                </ul>
+                <h3>大家智合网络科技股份有限公司（2017.04 - 2019.05）</h3>
+                <ul class="exp">
+                    <li>
+                        <div class="circle"></div>
+                        <h4>印刷家电商平台 (核心研发)</h4>
+                        <ul class="sub_ul">
+                            <li>负责电商平台核心模块开发，通过FreeMarker模板引擎实现首页静态化，显著提升页面加载速度。</li>
+                            <li>设计"转账支付"功能，通过Quartz定时任务与银行接口联动，实现自动化对账，大幅减少人工干预。</li>
+                            <li>基于Solr搜索引擎改造全站检索功能，支持商品、订单、用户等多维度搜索，显著提升搜索响应速度和准确性。</li>
+                            <li>基于Spring AOP设计后台管理系统与前台商城的数据同步方案，保证业务数据一致性。</li>
+                        </ul>
+                    </li>
+                </ul>
+                <h3>瑞达昇科技有限公司（2014.07 - 2017.02）</h3>
+                <ul class="exp">
+                    <li>
+                        <div class="circle"></div>
+                        <h4>享乐派社交平台 (全栈开发)</h4>
+                        <ul class="sub_ul">
+                            <li>独立负责游戏管理、消息中心、活动统计等核心模块开发。</li>
+                            <li>基于Echarts构建多维度数据统计报表系统，帮助商家精准分析活动效果。</li>
+                            <li>实现微信端、商家端、管理后台三大模块联动，确保系统稳定运行。</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <div class="circle"></div>
+                        <h4>版权监管平台 (Java开发)</h4>
+                        <ul class="sub_ul">
+                            <li>开发高稳定性爬虫程序，实现文本、音视频内容精准采集，支持主流内容网站。</li>
+                            <li>基于WebSocket构建实时监控系统，实现运行进度可视化跟踪，提升问题排查效率。</li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+
+
+
+</body>
+
+</html>

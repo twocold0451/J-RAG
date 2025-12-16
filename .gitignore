@@ -1,0 +1,29 @@
+# Java/Maven
+/target/
+*.jar
+*.war
+*.class
+
+# Node.js/Frontend
+/frontend/
+
+# IDE-specific files
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+
+# Local database data
+/postgres-data/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+#/resume/

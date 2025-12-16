@@ -1,0 +1,1 @@
+ALTER TABLE chunks ADD COLUMN chunker_name VARCHAR(255);
