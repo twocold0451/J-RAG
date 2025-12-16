@@ -1,7 +1,7 @@
 # J-RAG: Enterprise-grade RAG Engine in Java
 # J-RAG: Java 企业级检索增强生成引擎
 
-![Java](https://img.shields.io/badge/Java-17%2B-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21%2B-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.x-6DB33F?style=for-the-badge&logo=spring&logoColor=white)
 ![LangChain4j](https://img.shields.io/badge/LangChain4j-Integration-blue?style=for-the-badge)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
@@ -31,7 +31,7 @@
 
 ## 🛠️ Tech Stack / 技术栈
 
-- **Backend**: Java 17, Spring Boot 3
+- **Backend**: Java 21, Spring Boot 3
 - **AI Integration**: LangChain4j (OpenAI API Compatible)
 - **Database**: PostgreSQL + pgvector extension
 - **Security**: Spring Security + JWT
@@ -44,7 +44,7 @@
 ## 🚀 Quick Start / 快速开始
 
 ### 1. Prerequisites / 环境准备
-- **Java 17+**
+- **Java 21+**
 - **Docker & Docker Compose**
 - **Maven**
 - **Node.js** (for frontend)
