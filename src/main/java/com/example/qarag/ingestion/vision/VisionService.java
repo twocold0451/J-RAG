@@ -1,6 +1,7 @@
 package com.example.qarag.ingestion.vision;
 
 import com.example.qarag.config.RagProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -27,6 +28,7 @@ public class VisionService {
 
     private final RagProperties ragProperties;
     private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 检查视觉服务是否已启用
@@ -119,18 +121,24 @@ public class VisionService {
             log.info("Calling Google Gemini API. Image size: {} KB. Model: {}", payloadSizeKB, config.modelName());
 
             long startTime = System.currentTimeMillis();
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<String> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
                     request,
-                    Map.class);
+                    String.class);
             long duration = System.currentTimeMillis() - startTime;
             log.info("Google Gemini API call completed in {} ms. Status: {}", duration, response.getStatusCode());
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return extractContentFromGoogleResponse(response.getBody());
+                try {
+                    Map<String, Object> bodyMap = objectMapper.readValue(response.getBody(), Map.class);
+                    return extractContentFromGoogleResponse(bodyMap);
+                } catch (Exception e) {
+                    log.error("Failed to parse JSON response from Google Gemini API. Raw response: {}", response.getBody());
+                    throw new RuntimeException("Google Gemini API returned invalid JSON", e);
+                }
             } else {
-                log.error("Google Gemini API returned non-success status: {}", response.getStatusCode());
+                log.error("Google Gemini API returned non-success status: {}. Body: {}", response.getStatusCode(), response.getBody());
                 return "[视觉模型 请求失败]";
             }
         } catch (Exception e) {
@@ -189,18 +197,24 @@ public class VisionService {
             log.debug("Calling Vision API: {} with model {}", url, config.modelName());
 
             long startTime = System.currentTimeMillis();
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<String> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
                     request,
-                    Map.class);
+                    String.class);
             long duration = System.currentTimeMillis() - startTime;
             log.info("Vision API call completed in {} ms. Status: {}", duration, response.getStatusCode());
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return extractContentFromResponse(response.getBody());
+                try {
+                    Map<String, Object> bodyMap = objectMapper.readValue(response.getBody(), Map.class);
+                    return extractContentFromResponse(bodyMap);
+                } catch (Exception e) {
+                    log.error("Failed to parse JSON response from Vision API. Raw response: {}", response.getBody());
+                    throw new RuntimeException("Vision API returned invalid JSON", e);
+                }
             } else {
-                log.error("Vision API returned non-success status: {}", response.getStatusCode());
+                log.error("Vision API returned non-success status: {}. Body: {}", response.getStatusCode(), response.getBody());
                 return "[视觉模型 请求失败]";
             }
         } catch (Exception e) {

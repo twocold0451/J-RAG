@@ -19,9 +19,17 @@ const useWebSocket = () => {
     const token = localStorage.getItem('jwtToken');
     if (!token) return;
 
-    // Assuming backend is on localhost:8080. 
-    // In a real app, this should match the API base URL logic.
-    const socketFactory = () => new SockJS('http://localhost:8080/ws'); 
+    // Calculate the WebSocket URL based on the API base URL to ensure correct protocol (ws/wss)
+    // and host are used. This fixes the "insecure SockJS connection" error in production.
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+    let wsUrl = apiBaseUrl.replace(/\/api\/?$/, '/ws');
+
+    // In development, force relative path to use Vite proxy and avoid CORS
+    if (import.meta.env.DEV) {
+        wsUrl = '/ws';
+    }
+
+    const socketFactory = () => new SockJS(wsUrl); 
 
     const client = new Client({
       webSocketFactory: socketFactory,
