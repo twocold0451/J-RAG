@@ -191,8 +191,11 @@ function ChatPage() {
     try {
       const token = localStorage.getItem('jwtToken');
       let aiResponseText = '';
+      
+      const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+      const streamUrl = `${apiBaseUrl}/conversations/${selectedConversation.id}/chat/stream`;
 
-      await fetchEventSource(`/api/conversations/${selectedConversation.id}/chat/stream`, {
+      await fetchEventSource(streamUrl, {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
