@@ -3,6 +3,7 @@ package com.example.qarag.qa;
 import com.example.qarag.api.dto.QaResponse;
 import com.example.qarag.config.RagProperties;
 import com.example.qarag.domain.Chunk;
+import com.example.qarag.utils.MmrUtils;
 import com.huaban.analysis.jieba.JiebaSegmenter;
 import com.huaban.analysis.jieba.SegToken;
 import com.pgvector.PGvector;
@@ -121,20 +122,36 @@ public class QAServiceImpl implements QAService {
             float[] queryEmbedding = embeddingModel.embedAll(List.of(questionSegment)).content().getFirst().vector();
 
             String vectorSql = """
-                            SELECT id, document_id, content, chunk_index, source_meta, chunker_name, content_keywords, created_at\s
+                            SELECT id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at\s
                             FROM chunks\s
                             WHERE document_id IN (%s)
                             ORDER BY content_vector <=> ?\s
                             LIMIT ?
                            \s""".formatted(documentIdsClause);
+            
+            // MMR Parameters
+            int fetchK = searchK * 5; // Fetch more candidates for diversity re-ranking
+            double mmrLambda = 0.5;   // Balance between relevance and diversity
+
             log.info("Vector Search SQL: {}", vectorSql);
-            log.info("Vector Search Params: embedding={}, limit={}", Arrays.toString(queryEmbedding), searchK);
-            List<Chunk> results = jdbcClient.sql(vectorSql)
-                    .params(new PGvector(queryEmbedding), searchK)
+            log.info("Vector Search Params: embedding={}, fetchLimit={}", Arrays.toString(queryEmbedding), fetchK);
+            
+            List<Chunk> initialResults = jdbcClient.sql(vectorSql)
+                    .params(new PGvector(queryEmbedding), fetchK)
                     .query(new ChunkRowMapper())
                     .list();
-            log.info("Vector search found {} results in {} ms", results.size(), System.currentTimeMillis() - vectorSearchStart);
-            return results;
+            
+            log.info("Vector search fetched {} candidates in {} ms", initialResults.size(), System.currentTimeMillis() - vectorSearchStart);
+
+            // Apply MMR Re-ranking
+            long mmrStart = System.currentTimeMillis();
+            List<Chunk> finalResults = MmrUtils.applyMmr(initialResults, queryEmbedding, searchK, mmrLambda);
+            log.info("MMR processing took {} ms. Reduced {} candidates to {}.", System.currentTimeMillis() - mmrStart, initialResults.size(), finalResults.size());
+
+            // Clear vectors to save memory as they are not needed for subsequent steps
+            finalResults.forEach(c -> c.setContentVector(null));
+
+            return finalResults;
         }, searchExecutor);
 
         // 2. Prepare Keyword Search Task
@@ -157,7 +174,7 @@ public class QAServiceImpl implements QAService {
             log.info("Keyword search segmented query: '{}'", segmentedQuery);
 
             String keywordSql = """
-                            SELECT id, document_id, content, chunk_index, source_meta, chunker_name, content_keywords, created_at\s
+                            SELECT id, document_id, content, NULL as content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at\s
                             FROM chunks\s
                             WHERE document_id IN (%s)
                             AND content_search @@ websearch_to_tsquery('simple', ?)
@@ -222,9 +239,11 @@ public class QAServiceImpl implements QAService {
             chunk.setId(UUID.fromString(rs.getString("id")));
             chunk.setDocumentId(UUID.fromString(rs.getString("document_id")));
             chunk.setContent(rs.getString("content"));
-            // Note: content_vector is usually not needed for the final answer context, 
-            // and mapping it back might be overhead, but we can if needed. 
-            // chunk.setContentVector(new PGvector(rs.getString("content_vector"))); 
+            // Map content_vector for MMR calculation
+            String vectorStr = rs.getString("content_vector");
+            if (vectorStr != null) {
+                chunk.setContentVector(new PGvector(vectorStr));
+            }
             chunk.setChunkIndex(rs.getInt("chunk_index"));
             chunk.setSourceMeta(rs.getString("source_meta"));
             chunk.setChunkerName(rs.getString("chunker_name"));
