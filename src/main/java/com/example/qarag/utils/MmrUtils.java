@@ -7,29 +7,29 @@ import java.util.*;
 public class MmrUtils {
 
     /**
-     * Applies Maximal Marginal Relevance (MMR) to re-rank and filter chunks.
+     * 应用最大边缘相关性 (MMR) 来重新排序和过滤片段。
      *
-     * @param candidates    The list of candidate chunks retrieved from vector search.
-     * @param queryVector   The embedding vector of the query.
-     * @param k             The number of chunks to select.
-     * @param lambda        The diversity parameter (0.0 - 1.0).
-     *                      0.5 = Balanced
-     *                      1.0 = Pure relevance (Standard Vector Search)
-     *                      0.0 = Pure diversity
-     * @return A list of selected chunks sorted by MMR score.
+     * @param candidates    从向量搜索中检索到的候选片段列表。
+     * @param queryVector   查询的嵌入向量。
+     * @param k             要选择的片段数量。
+     * @param lambda        多样性参数 (0.0 - 1.0)。
+     *                      0.5 = 平衡
+     *                      1.0 = 纯相关性 (标准向量搜索)
+     *                      0.0 = 纯多样性
+     * @return 按 MMR 分数排序的所选片段列表。
      */
     public static List<Chunk> applyMmr(List<Chunk> candidates, float[] queryVector, int k, double lambda) {
         if (candidates == null || candidates.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // Limit k to the number of candidates available
+        // 限制 k 的数量不超过候选片段的总数
         int limit = Math.min(k, candidates.size());
 
         List<Chunk> selected = new ArrayList<>(limit);
         List<Chunk> remaining = new ArrayList<>(candidates);
 
-        // Pre-calculate similarity between query and all candidates to avoid re-calculation
+        // 预先计算查询与所有候选片段之间的相似度，以避免重复计算
         Map<Chunk, Double> querySimilarities = new HashMap<>();
         for (Chunk chunk : candidates) {
             float[] docVector = chunk.getContentVector().toArray();
@@ -48,7 +48,7 @@ public class MmrUtils {
                 if (!selected.isEmpty()) {
                     double maxSimToSelected = Double.NEGATIVE_INFINITY;
                     float[] candidateVector = candidate.getContentVector().toArray();
-                    
+
                     for (Chunk s : selected) {
                         float[] selectedVector = s.getContentVector().toArray();
                         double sim = cosineSimilarity(candidateVector, selectedVector);
@@ -59,7 +59,7 @@ public class MmrUtils {
                     redundancy = maxSimToSelected;
                 }
 
-                // MMR Formula: Lambda * Relevance - (1 - Lambda) * Redundancy
+                // MMR 公式: Lambda * 相关性 - (1 - Lambda) * 冗余度
                 double mmrScore = (lambda * relevance) - ((1.0 - lambda) * redundancy);
 
                 if (mmrScore > bestMmrScore) {
@@ -80,12 +80,12 @@ public class MmrUtils {
     }
 
     /**
-     * Calculates Cosine Similarity between two vectors.
-     * Range: -1 to 1 (1 means identical direction).
+     * 计算两个向量之间的余弦相似度。
+     * 范围：-1 到 1（1 表示方向完全相同）。
      */
     public static double cosineSimilarity(float[] v1, float[] v2) {
         if (v1.length != v2.length) {
-            throw new IllegalArgumentException("Vectors must have the same length");
+            throw new IllegalArgumentException("向量长度必须相同");
         }
 
         double dotProduct = 0.0;

@@ -24,7 +24,7 @@ public class UserService {
     @Transactional
     public User register(String username, String password, String email) {
         if (userRepository.existsByUsername(username)) {
-            throw new IllegalArgumentException("Username already exists");
+            throw new IllegalArgumentException("用户名已存在");
         }
 
         String salt = generateSalt();
@@ -36,18 +36,18 @@ public class UserService {
         user.setSalt(salt);
         user.setPasswordHash(hashedPassword);
         user.setCreatedAt(LocalDateTime.now());
-        user.setRole("USER"); // Default role
+        user.setRole("USER"); // 默认角色
 
         return userRepository.save(user);
     }
 
     public User login(String username, String password) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
+                .orElseThrow(() -> new IllegalArgumentException("用户名或密码无效"));
 
         String inputHashed = hashPassword(password, user.getSalt());
         if (!inputHashed.equals(user.getPasswordHash())) {
-            throw new IllegalArgumentException("Invalid username or password");
+            throw new IllegalArgumentException("用户名或密码无效");
         }
 
         return user;
@@ -55,7 +55,7 @@ public class UserService {
 
     public User findById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到用户"));
     }
 
     private String generateSalt() {
@@ -72,7 +72,7 @@ public class UserService {
             byte[] hashedPassword = md.digest(password.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(hashedPassword);
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not found", e);
+            throw new RuntimeException("未找到 SHA-256 算法", e);
         }
     }
 }

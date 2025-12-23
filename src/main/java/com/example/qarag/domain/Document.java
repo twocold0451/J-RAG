@@ -31,9 +31,9 @@ public class Document implements Persistable<UUID> {
     @Setter
     @Getter
     private boolean isPublic;
-    private DocumentStatus status = DocumentStatus.PENDING; // New field with default value
-    private Integer progress = 0; // New field with default value
-    private String errorMessage; // New field
+    private DocumentStatus status = DocumentStatus.PENDING; // 具有默认值的新字段
+    private Integer progress = 0; // 具有默认值的新字段
+    private String errorMessage; // 新字段
 
     @Setter
     @Transient

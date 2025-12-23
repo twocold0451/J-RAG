@@ -62,7 +62,7 @@ public class ImageProcessor implements PdfElementProcessor {
     public PdfElementResult process(PDDocument document, int pageNumber, List<Rectangle2D> excludeRegions) {
         // 检查 Vision 服务是否可用
         if (!visionService.isEnabled()) {
-            log.info("Vision service not enabled, skipping image processing for page {}", pageNumber);
+            log.info("视觉服务未启用，跳过第 {} 页的图片处理", pageNumber);
             return PdfElementResult.empty(PdfElementType.IMAGE, pageNumber);
         }
 
@@ -82,14 +82,14 @@ public class ImageProcessor implements PdfElementProcessor {
                 return PdfElementResult.empty(PdfElementType.IMAGE, pageNumber);
             }
 
-            log.info("Processing {} images on page {} with Vision API", imageCount, pageNumber);
+            log.info("正在使用 Vision API 处理第 {} 页上的 {} 张图片", pageNumber, imageCount);
 
             // 渲染整页为图片发送给 视觉模型
             PDFRenderer renderer = new PDFRenderer(document);
             BufferedImage pageImage = renderer.renderImageWithDPI(pageNumber - 1, 150);
 
             long imageSizeBytes = (long) pageImage.getWidth() * pageImage.getHeight() * 3; // Approx 3 bytes per pixel (RGB)
-            log.info("Rendered page {} as image: {}x{} pixels, approx size in memory: {} KB", 
+            log.info("已将第 {} 页渲染为图片: {}x{} 像素，内存占用约: {} KB", 
                      pageNumber, pageImage.getWidth(), pageImage.getHeight(), imageSizeBytes / 1024);
 
             // 调用 视觉模型 分析图表
@@ -98,24 +98,24 @@ public class ImageProcessor implements PdfElementProcessor {
             long duration = System.currentTimeMillis() - start;
             
             if (duration > 5000) {
-                 log.warn("Vision analysis for page {} took {} ms ( > 5s )", pageNumber, duration);
+                 log.warn("第 {} 页的视觉分析耗时 {} 毫秒 ( > 5秒 )", pageNumber, duration);
             } else {
-                 log.info("Vision analysis for page {} took {} ms", pageNumber, duration);
+                 log.info("第 {} 页的视觉分析耗时 {} 毫秒", pageNumber, duration);
             }
 
             if (analysisResult == null || analysisResult.isBlank()
                     || analysisResult.contains("未启用") || analysisResult.contains("失败")) {
-                log.warn("Vision API returned empty or error for page {}", pageNumber);
+                log.warn("Vision API 为第 {} 页返回了空值或错误", pageNumber);
                 return PdfElementResult.empty(PdfElementType.IMAGE, pageNumber);
             }
             
-            // Log the vision model's analysis result (limit length for readability)
+            // 记录视觉模型的分析结果（限制长度以增强可读性）
             String loggableResult = analysisResult.length() > 500 
                                   ? analysisResult.substring(0, 500) + "... [truncated]"
                                   : analysisResult;
-            log.info("Vision Model Analysis Result for page {}: \n{}", pageNumber, loggableResult.replace("\n", " "));
+            log.info("第 {} 页的视觉模型分析结果: \n{}", pageNumber, loggableResult.replace("\n", " "));
 
-            log.info("Successfully analyzed {} images on page {}, got {} characters",
+            log.info("成功分析了第 {} 页上的 {} 张图片，提取了 {} 个字符",
                     imageCount, pageNumber, analysisResult.length());
 
             return PdfElementResult.success(
@@ -124,7 +124,7 @@ public class ImageProcessor implements PdfElementProcessor {
                     pageNumber);
 
         } catch (IOException e) {
-            log.error("Failed to process images on page {}: {}", pageNumber, e.getMessage());
+            log.error("处理第 {} 页的图片失败: {}", pageNumber, e.getMessage());
             return PdfElementResult.failure(PdfElementType.IMAGE, pageNumber, e.getMessage());
         }
     }
@@ -159,7 +159,7 @@ public class ImageProcessor implements PdfElementProcessor {
             boolean shouldProcess = !text.isEmpty();
 
             if (shouldProcess) {
-                log.debug("Page {} has both text and images, ImageProcessor will handle images", pageNumber);
+                log.debug("第 {} 页既有文本又有图片，ImageProcessor 将处理图片部分", pageNumber);
             }
 
             return shouldProcess;

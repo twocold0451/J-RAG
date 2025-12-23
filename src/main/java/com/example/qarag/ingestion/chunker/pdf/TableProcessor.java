@@ -19,7 +19,6 @@ import java.util.List;
  * 文本型表格处理器
  * 使用 Tabula 提取 PDF 中的表格并转换为 Markdown 格式
  * 返回表格区域坐标，供后续处理器跳过
- * 
  * 注意：不能使用 try-with-resources 关闭 ObjectExtractor，
  * 因为它会关闭底层的 PDDocument
  */
@@ -69,13 +68,13 @@ public class TableProcessor implements PdfElementProcessor {
                 content.append(markdown);
             }
 
-            log.debug("Extracted {} tables from page {}, regions: {}",
+            log.debug("从第 {} 页提取了 {} 个表格，区域: {}",
                     tables.size(), pageNumber, tableRegions);
             return PdfElementResult.success(content.toString(), PdfElementType.TEXT_TABLE,
                     pageNumber, tableRegions);
 
         } catch (Exception e) {
-            log.error("Failed to extract tables from page {}: {}", pageNumber, e.getMessage());
+            log.error("提取第 {} 页的表格失败: {}", pageNumber, e.getMessage());
             return PdfElementResult.failure(PdfElementType.TEXT_TABLE, pageNumber, e.getMessage());
         }
     }
@@ -124,11 +123,7 @@ public class TableProcessor implements PdfElementProcessor {
             markdown.append(rowBuilder).append("\n");
 
             if (i == 0) {
-                StringBuilder separator = new StringBuilder("|");
-                for (int j = 0; j < row.size(); j++) {
-                    separator.append(" --- |");
-                }
-                markdown.append(separator).append("\n");
+                markdown.append("|").append(" --- |".repeat(row.size())).append("\n");
             }
         }
 

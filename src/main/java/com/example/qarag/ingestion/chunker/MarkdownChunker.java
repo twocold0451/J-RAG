@@ -36,7 +36,7 @@ public class MarkdownChunker implements DocumentChunker {
 
     @Override
     public List<TextSegment> chunk(Path filePath) {
-        log.debug("Using MarkdownChunker for Markdown document");
+        log.debug("对 Markdown 文档使用 MarkdownChunker");
 
         Document document;
         try {
@@ -50,8 +50,8 @@ public class MarkdownChunker implements DocumentChunker {
 
             document = Document.from(new String(bytes, Charset.forName(encoding)));
         } catch (IOException e) {
-            log.error("Failed to read Markdown file: {}", filePath, e);
-            throw new RuntimeException("Failed to read Markdown file", e);
+            log.error("读取 Markdown 文件失败: {}", filePath, e);
+            throw new RuntimeException("读取 Markdown 文件失败", e);
         }
 
         List<TextSegment> segments = new ArrayList<>();
@@ -107,7 +107,7 @@ public class MarkdownChunker implements DocumentChunker {
             createSegmentsFromSection(segments, currentSectionContent.toString(), currentPath, filePath, recursiveSplitter);
         }
 
-        log.info("MarkdownChunker produced {} segments with structure awareness", segments.size());
+        log.info("MarkdownChunker 生成了 {} 个具有结构感知的片段", segments.size());
         return segments;
     }
 

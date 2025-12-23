@@ -28,16 +28,20 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
+import dev.langchain4j.model.scoring.ScoringModel;
+import dev.langchain4j.model.output.Response;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class QAServiceImpl implements QAService {
 
     private final EmbeddingModel embeddingModel;
-    private final ChatModel chatLanguageModel;
+    private final ChatModel chatModel;
     private final RagProperties ragProperties;
     private final JdbcClient jdbcClient; // Use JdbcClient for complex queries
     private final Executor searchExecutor; // Injected Custom Executor
+    private final ScoringModel scoringModel; // Injected standard scoring model (can be null)
     private final JiebaSegmenter jiebaSegmenter = new JiebaSegmenter();
     private final Set<String> stopWords = new HashSet<>();
 
@@ -54,12 +58,12 @@ public class QAServiceImpl implements QAService {
                         }
                     }
                 }
-                log.info("Loaded {} stop words.", stopWords.size());
+                log.info("已加载 {} 个停用词。", stopWords.size());
             } else {
-                log.warn("stopwords.txt not found in resources.");
+                log.warn("资源中未找到 stopwords.txt。");
             }
         } catch (Exception e) {
-            log.error("Failed to load stop words", e);
+            log.error("加载停用词失败", e);
         }
     }
 
@@ -78,7 +82,7 @@ public class QAServiceImpl implements QAService {
     public QaResponse answer(String question) {
         // For a global answer without specific document filters, call hybridSearch with an empty documentIds list.
         // The hybridSearch method will return an empty list if no document IDs are provided, indicating no specific context.
-        List<Chunk> relevantChunks = hybridSearch(question, ragProperties.retrieval().topK(), Collections.emptyList());
+        List<Chunk> relevantChunks = hybridSearch(question, Collections.emptyList());
 
         // If no relevant chunks are found, we can still attempt to answer using LLM without RAG context
         // Or return a specific message indicating no context was found.
@@ -90,26 +94,30 @@ public class QAServiceImpl implements QAService {
         String prompt = String.format(PROMPT_TEMPLATE, question, chunksContext);
 
         // Call the LLM to generate an answer
-        String answer = chatLanguageModel.chat(prompt);
+        String answer = chatModel.chat(prompt);
 
         return new QaResponse(answer, relevantChunks);
     }
 
     /**
-     * Executes hybrid search: Vector Search + Keyword Search -> RRF Fusion
+     * Executes hybrid search: Vector Search + Keyword Search -> (RRF Fusion OR Reranking)
      */
     @Override
-    public List<Chunk> hybridSearch(String question, int finalK, List<UUID> documentIds) {
+    public List<Chunk> hybridSearch(String question, List<UUID> documentIds) {
         long startTime = System.currentTimeMillis();
-        log.info("Starting hybrid search for question: '{}' with {} document(s) and finalK: {}", question, documentIds.size(), finalK);
+        boolean rerankEnabled = ragProperties.retrieval().rerank() != null && ragProperties.retrieval().rerank().enabled();
+        int topK = ragProperties.retrieval().topK();
+
+        // 如果开启重排序，则初始搜索数量采用 initialTopK
+        int searchK = rerankEnabled ? ragProperties.retrieval().rerank().initialTopK() : topK;
+
+        log.info("开始混合搜索问题：'{}'，模式：{}，涉及 {} 个文档，searchK：{}",
+                question, (rerankEnabled ? "重排序" : "RRF 融合"), documentIds.size(), searchK);
 
         if (documentIds.isEmpty()) {
-            log.info("No document IDs provided for hybrid search, returning empty list as no specific context is given.");
+            log.info("混合搜索未提供文档 ID，由于未给定特定上下文，返回空列表。");
             return Collections.emptyList();
         }
-
-        int searchK = ragProperties.retrieval().topK(); // Fetch top from each source
-        int rrfK = 60;    // RRF constant
 
         String documentIdsClause = documentIds.stream()
                 .map(uuid -> "'" + uuid.toString() + "'")
@@ -130,25 +138,20 @@ public class QAServiceImpl implements QAService {
                            \s""".formatted(documentIdsClause);
             
             // MMR Parameters
-            int fetchK = searchK * 5; // Fetch more candidates for diversity re-ranking
+            int fetchK = searchK * 3; // Fetch more candidates for diversity re-ranking
             double mmrLambda = 0.5;   // Balance between relevance and diversity
 
-            log.info("Vector Search SQL: {}", vectorSql);
-            log.info("Vector Search Params: embedding={}, fetchLimit={}", Arrays.toString(queryEmbedding), fetchK);
-            
             List<Chunk> initialResults = jdbcClient.sql(vectorSql)
                     .params(new PGvector(queryEmbedding), fetchK)
                     .query(new ChunkRowMapper())
                     .list();
             
-            log.info("Vector search fetched {} candidates in {} ms", initialResults.size(), System.currentTimeMillis() - vectorSearchStart);
+            log.info("向量搜索在 {} 毫秒内获取了 {} 个候选片段", System.currentTimeMillis() - vectorSearchStart, initialResults.size());
 
-            // Apply MMR Re-ranking
-            long mmrStart = System.currentTimeMillis();
+            // 应用 MMR 重新排序
             List<Chunk> finalResults = MmrUtils.applyMmr(initialResults, queryEmbedding, searchK, mmrLambda);
-            log.info("MMR processing took {} ms. Reduced {} candidates to {}.", System.currentTimeMillis() - mmrStart, initialResults.size(), finalResults.size());
-
-            // Clear vectors to save memory as they are not needed for subsequent steps
+            
+            // Clear vectors to save memory
             finalResults.forEach(c -> c.setContentVector(null));
 
             return finalResults;
@@ -166,32 +169,39 @@ public class QAServiceImpl implements QAService {
                     .collect(Collectors.joining(" "));
 
             if (segmentedQuery.isBlank()) {
-                // If all words are filtered out (unlikely but possible), fall back to original or handle gracefully
-                log.warn("All keywords filtered out for query: '{}'. Falling back to original query.", question);
                 segmentedQuery = tokens.stream().map(i -> i.word).collect(Collectors.joining(" "));
             }
 
-            log.info("Keyword search segmented query: '{}'", segmentedQuery);
+            // 构建全文检索的 tsquery：将分词结果去重并转换为 | (或) 逻辑
+            String tsQuery = Arrays.stream(segmentedQuery.split("\\s+"))
+                    .filter(s -> !s.isBlank())
+                    .distinct() // 增加去重处理
+                    .collect(Collectors.joining(" | "));
+
+            if (tsQuery.isBlank()) {
+                tsQuery = question;
+            }
+
+            log.info("关键字搜索分词查询：'{}' -> tsquery: '{}'", segmentedQuery, tsQuery);
 
             String keywordSql = """
                             SELECT id, document_id, content, NULL as content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at\s
                             FROM chunks\s
                             WHERE document_id IN (%s)
-                            AND content_search @@ websearch_to_tsquery('simple', ?)
-                            ORDER BY ts_rank(content_search, websearch_to_tsquery('simple', ?)) DESC
+                            AND content_search @@ to_tsquery('simple', ?)
+                            ORDER BY ts_rank(content_search, to_tsquery('simple', ?)) DESC
                             LIMIT ?
                            \s""".formatted(documentIdsClause);
-            log.info("Keyword Search SQL: {}", keywordSql);
-            log.info("Keyword Search Params: query='{}', limit={}", segmentedQuery, searchK);
+            
             List<Chunk> results = jdbcClient.sql(keywordSql)
-                    .params(segmentedQuery, segmentedQuery, searchK)
+                    .params(tsQuery, tsQuery, searchK)
                     .query(new ChunkRowMapper())
                     .list();
-            log.info("Keyword search found {} results in {} ms", results.size(), System.currentTimeMillis() - keywordSearchStart);
+            log.info("关键字搜索在 {} 毫秒内找到了 {} 个结果", System.currentTimeMillis() - keywordSearchStart, results.size());
             return results;
         }, searchExecutor);
 
-        // 3. Wait for both and Retrieve Results
+        // 3. Wait for results
         List<Chunk> vectorResults;
         List<Chunk> keywordResults;
         try {
@@ -199,38 +209,71 @@ public class QAServiceImpl implements QAService {
             vectorResults = vectorSearchFuture.get();
             keywordResults = keywordSearchFuture.get();
         } catch (Exception e) {
-            log.error("Error during hybrid search execution", e);
-            throw new RuntimeException("Hybrid search failed", e);
+            log.error("执行混合搜索时出错", e);
+            throw new RuntimeException("混合搜索失败", e);
         }
 
-        // 4. RRF Fusion
-        Map<UUID, Double> scores = new HashMap<>();
-        Map<UUID, Chunk> chunkMap = new HashMap<>();
+        // 4. 选择融合策略：重排序 或 RRF
+        if (rerankEnabled && scoringModel != null) {
+            // 合并并去重
+            Map<UUID, Chunk> combinedMap = new LinkedHashMap<>();
+            vectorResults.forEach(c -> combinedMap.put(c.getId(), c));
+            keywordResults.forEach(c -> combinedMap.put(c.getId(), c));
+            List<Chunk> candidates = new ArrayList<>(combinedMap.values());
+            
+            log.info("重排序模式：合并后共有 {} 个候选片段", candidates.size());
+            
+            // 使用 LangChain4j 标准接口进行评分
+            List<TextSegment> segments = candidates.stream()
+                    .map(c -> TextSegment.from(c.getContent()))
+                    .collect(Collectors.toList());
+            
+            Response<List<Double>> scoresResponse = scoringModel.scoreAll(segments, question);
+            List<Double> scores = scoresResponse.content();
 
-        // Process Vector Results
-        for (int i = 0; i < vectorResults.size(); i++) {
-            Chunk chunk = vectorResults.get(i);
-            chunkMap.putIfAbsent(chunk.getId(), chunk);
-            scores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
+            // 将分数关联回 Chunk 并排序
+            List<Chunk> finalResults = new ArrayList<>();
+            for (int i = 0; i < candidates.size(); i++) {
+                Chunk candidate = candidates.get(i);
+                double score = (scores != null && i < scores.size()) ? scores.get(i) : 0.0;
+                candidate.setScore(score); // 假设 Chunk 有 score 字段
+                finalResults.add(candidate);
+            }
+
+            finalResults.sort(Comparator.comparingDouble(Chunk::getScore).reversed());
+            
+            List<Chunk> limitedResults = finalResults.stream().limit(topK).collect(Collectors.toList());
+            log.info("重排序完成，耗时 {} 毫秒。最终返回 {} 个片段。", System.currentTimeMillis() - startTime, limitedResults.size());
+            return limitedResults;
+        } else {
+            // RRF 融合
+            int rrfK = 60;    // RRF constant
+            Map<UUID, Double> rrfScores = new HashMap<>();
+            Map<UUID, Chunk> chunkMap = new HashMap<>();
+
+            for (int i = 0; i < vectorResults.size(); i++) {
+                Chunk chunk = vectorResults.get(i);
+                chunkMap.putIfAbsent(chunk.getId(), chunk);
+                rrfScores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
+            }
+
+            for (int i = 0; i < keywordResults.size(); i++) {
+                Chunk chunk = keywordResults.get(i);
+                chunkMap.putIfAbsent(chunk.getId(), chunk);
+                rrfScores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
+            }
+
+            List<Chunk> finalResults = rrfScores.entrySet().stream()
+                    .sorted(Map.Entry.<UUID, Double>comparingByValue().reversed())
+                    .limit(topK)
+                    .map(entry -> chunkMap.get(entry.getKey()))
+                    .collect(Collectors.toList());
+
+            log.info("RRF 融合完成，耗时 {} 毫秒。最终得到 {} 个片段。", System.currentTimeMillis() - startTime, finalResults.size());
+            return finalResults;
         }
-
-        // Process Keyword Results
-        for (int i = 0; i < keywordResults.size(); i++) {
-            Chunk chunk = keywordResults.get(i);
-            chunkMap.putIfAbsent(chunk.getId(), chunk);
-            scores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
-        }
-
-        // 5. Sort and Limit
-        List<Chunk> finalResults = scores.entrySet().stream()
-                .sorted(Map.Entry.<UUID, Double>comparingByValue().reversed())
-                .limit(finalK)
-                .map(entry -> chunkMap.get(entry.getKey()))
-                .collect(Collectors.toList());
-
-        log.info("Hybrid search completed in {} ms. Final {} chunks after RRF fusion.", System.currentTimeMillis() - startTime, finalResults.size());
-        return finalResults;
     }
+
     // RowMapper to map ResultSet to Chunk object
     private static class ChunkRowMapper implements RowMapper<Chunk> {
         @Override

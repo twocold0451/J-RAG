@@ -65,9 +65,9 @@ public class IngestionServiceImpl implements IngestionService {
                         }
                     }
                 }
-                log.info("IngestionService: Loaded {} stop words.", stopWords.size());
+                log.info("IngestionService: 已加载 {} 个停用词。", stopWords.size());
             } else {
-                log.warn("IngestionService: stopwords.txt not found.");
+                log.warn("IngestionService: 未找到 stopwords.txt。");
             }
         } catch (Exception e) {
             log.error("IngestionService: Failed to load stop words", e);
@@ -90,13 +90,13 @@ public class IngestionServiceImpl implements IngestionService {
             List<TextSegment> rawSegments = chunker.chunk(tempFilePath);
 
             if (rawSegments.isEmpty()) {
-                log.warn("No segments found for document {}", documentId);
+                log.warn("文档 {} 未找到任何文本片段", documentId);
                 documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.FAILED, 0,
-                        "No content extracted");
+                        "未提取到内容");
                 messagingTemplate.convertAndSendToUser(
                         userId.toString(),
                         "/queue/document-updates",
-                        new DocumentUpdateMessage(documentId, DocumentStatus.FAILED, 0, "No content extracted"));
+                        new DocumentUpdateMessage(documentId, DocumentStatus.FAILED, 0, "未提取到内容"));
                 return;
             }
 
@@ -107,10 +107,10 @@ public class IngestionServiceImpl implements IngestionService {
                     .toList();
             
             if (segments.isEmpty()) {
-                 log.warn("All segments were filtered out after cleaning for document {}", documentId);
+                 log.warn("清洗后文档 {} 的所有片段均被过滤掉", documentId);
                  documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.FAILED, 0,
-                         "No content remaining after cleaning");
-                 // ... handle error
+                         "清洗后没有剩余内容");
+                 // ... 处理错误
                  return;
             }
 
@@ -135,22 +135,22 @@ public class IngestionServiceImpl implements IngestionService {
                             userId.toString(),
                             "/queue/document-updates",
                             new DocumentUpdateMessage(documentId, DocumentStatus.PROCESSING, currentProgress, null));
-                    log.info("Document {} ingestion progress: {}%", documentId, currentProgress);
+                    log.info("文档 {} 解析进度: {}%", documentId, currentProgress);
                 }
 
                 String metadataJson = "{}";
                 try {
                     metadataJson = objectMapper.writeValueAsString(segment.metadata().toMap());
                 } catch (Exception e) {
-                    log.warn("Failed to serialize metadata for document {}", documentId, e);
+                    log.warn("无法为文档 {} 序列化元数据", documentId, e);
                 }
 
                 String insertSql = """
                         INSERT INTO chunks(id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at)
                         VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?)
                         """;
-                log.info("Ingestion INSERT SQL: {}", insertSql);
-                log.info("Ingestion INSERT Params: docId={}, content='{}', embedding_vector=<...>, index={}, metadata='{}', chunker={}, keywords='{}', createdAt={}",
+                log.info("入库 INSERT SQL: {}", insertSql);
+                log.info("入库 INSERT 参数: docId={}, content='{}', embedding_vector=<...>, index={}, metadata='{}', chunker={}, keywords='{}', createdAt={}",
                         documentId,
                         segment.text().replaceAll("\\u0000", "").substring(0, Math.min(segment.text().length(), 100)) + (segment.text().length() > 100 ? "..." : ""),
                         i,
@@ -195,7 +195,7 @@ public class IngestionServiceImpl implements IngestionService {
                 errorMessage = errorMessage.substring(0, 500) + "...";
             }
 
-            log.error("Failed to ingest document {}: {}", documentId, e.getMessage(), e);
+            log.error("文档 {} 解析入库失败: {}", documentId, e.getMessage(), e);
             documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.FAILED, 0, errorMessage);
             messagingTemplate.convertAndSendToUser(
                     userId.toString(),
@@ -205,7 +205,7 @@ public class IngestionServiceImpl implements IngestionService {
             try {
                 Files.deleteIfExists(tempFilePath);
             } catch (IOException e) {
-                log.error("Failed to delete temporary file {}: {}", tempFilePath, e.getMessage(), e);
+                log.error("删除临时文件 {} 失败: {}", tempFilePath, e.getMessage(), e);
             }
         }
     }

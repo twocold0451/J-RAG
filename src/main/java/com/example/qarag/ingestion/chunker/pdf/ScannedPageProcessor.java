@@ -56,7 +56,7 @@ public class ScannedPageProcessor implements PdfElementProcessor {
 
         // 检查 Vision 服务是否可用
         if (!visionService.isEnabled()) {
-            log.info("Vision service not enabled, returning placeholder for scanned page {}", pageNumber);
+            log.info("视觉服务未启用，为扫描页第 {} 页返回占位符", pageNumber);
             String placeholder = String.format(
                     "[扫描件页面 - 页码: %d - Vision 服务未启用，请配置 app.rag.vision]",
                     pageNumber);
@@ -69,7 +69,7 @@ public class ScannedPageProcessor implements PdfElementProcessor {
             PDFRenderer renderer = new PDFRenderer(document);
             BufferedImage pageImage = renderer.renderImageWithDPI(pageNumber - 1, 150); // 150 DPI
 
-            log.info("Processing scanned page {} with Vision API", pageNumber);
+            log.info("正在使用 Vision API 处理扫描页第 {} 页", pageNumber);
 
             // 调用 视觉模型 进行 OCR
             String extractedText = visionService.analyzeImage(pageImage, OCR_PROMPT);
@@ -78,13 +78,13 @@ public class ScannedPageProcessor implements PdfElementProcessor {
                 return PdfElementResult.empty(PdfElementType.SCANNED_PAGE, pageNumber);
             }
 
-            log.info("Successfully extracted {} characters from scanned page {}",
+            log.info("成功从扫描页第 {} 页提取了 {} 个字符",
                     extractedText.length(), pageNumber);
             return PdfElementResult.success(extractedText, PdfElementType.SCANNED_PAGE,
                     pageNumber, List.of(fullPage));
 
         } catch (Exception e) {
-            log.error("Failed to process scanned page {}: {}", pageNumber, e.getMessage());
+            log.error("处理扫描页第 {} 页失败: {}", pageNumber, e.getMessage());
             return PdfElementResult.failure(PdfElementType.SCANNED_PAGE, pageNumber, e.getMessage());
         }
     }
@@ -115,7 +115,7 @@ public class ScannedPageProcessor implements PdfElementProcessor {
             boolean isScanned = text.isEmpty() && hasImages;
 
             if (isScanned) {
-                log.debug("Page {} detected as scanned (no text, has images)", pageNumber);
+                log.debug("检测到第 {} 页为扫描件 (无文本，有图片)", pageNumber);
             }
 
             return isScanned;

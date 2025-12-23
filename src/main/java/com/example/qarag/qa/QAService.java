@@ -8,20 +8,19 @@ import java.util.UUID;
 
 public interface QAService {
     /**
-     * Answers a question based on the documents in the knowledge base.
+     * 根据知识库中的文档回答问题。
      *
-     * @param question The user's question.
-     * @return A response containing the answer and the sources used.
+     * @param question 用户的问题。
+     * @return 包含答案和所用来源的响应。
      */
     QaResponse answer(String question);
 
     /**
-     * Executes a hybrid search (vector + keyword) for relevant chunks, optionally filtered by document IDs.
+     * 执行混合搜索（向量 + 关键字）以检索相关片段，可选择按文档 ID 进行过滤。
      *
-     * @param question The user's question.
-     * @param topK The number of top relevant chunks to retrieve after RRF fusion.
-     * @param documentIds Optional list of document IDs to filter the search by.
-     * @return A list of the top K relevant chunks.
+     * @param question 用户的问题。
+     * @param documentIds 用于过滤搜索的可选文档 ID 列表。
+     * @return 包含前 K 个相关片段的列表。
      */
-    List<Chunk> hybridSearch(String question, int topK, List<UUID> documentIds);
+    List<Chunk> hybridSearch(String question, List<UUID> documentIds);
 }

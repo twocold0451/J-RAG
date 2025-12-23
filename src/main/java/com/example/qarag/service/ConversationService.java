@@ -1,5 +1,6 @@
 package com.example.qarag.service;
 
+import com.example.qarag.config.RagProperties;
 import com.example.qarag.domain.Chunk;
 import com.example.qarag.domain.ChatMessage;
 import com.example.qarag.domain.Conversation;
@@ -46,6 +47,8 @@ public class ConversationService {
     private final StreamingChatModel openAiStreamingChatModel;
     private final JdbcTemplate jdbcTemplate;
     private final QAService qaService;
+    private final QueryRewriteService queryRewriteService;
+    private final RagProperties ragProperties;
 
     private boolean isAdmin(Long userId) {
         return userRepository.findById(userId)
@@ -54,25 +57,25 @@ public class ConversationService {
     }
 
     /**
-     * Check if a user has access to a chat message
-     * @param messageId The message ID
-     * @param userId The user ID
-     * @return The conversation ID
-     * @throws SecurityException if access is denied
+     * 检查用户是否有权访问聊天消息
+     * @param messageId 消息 ID
+     * @param userId 用户 ID
+     * @return 对话 ID
+     * @throws SecurityException 如果拒绝访问
      */
     private Long checkMessageAccess(Long messageId, Long userId) {
-        // Get the message first
+        // 首先获取消息
         ChatMessage message = chatMessageRepository.findById(messageId)
-                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到消息"));
 
         Long conversationId = message.getConversationId();
 
-        // Check if user has access to the conversation
+        // 检查用户是否有权访问该对话
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to message");
+            throw new SecurityException("无权访问该消息");
         }
 
         return conversationId;
@@ -83,9 +86,9 @@ public class ConversationService {
         Conversation conversation = new Conversation();
         conversation.setUserId(userId);
         conversation.setTitle(title);
-        conversation.setPublic(isPublic); // Set isPublic
-        conversation.setParentId(parentId); // Set parentId
-        conversation.setAllowedUsers(allowedUsers); // Set allowedUsers
+        conversation.setPublic(isPublic); // 设置是否公开
+        conversation.setParentId(parentId); // 设置父级 ID
+        conversation.setAllowedUsers(allowedUsers); // 设置允许访问的用户
         conversation.setCreatedAt(LocalDateTime.now());
         conversation.setUpdatedAt(LocalDateTime.now());
         Conversation savedConversation = conversationRepository.save(conversation);
@@ -110,9 +113,9 @@ public class ConversationService {
 
     public List<ChatMessage> getChatMessagesForConversation(Long conversationId, Long userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to conversation");
+            throw new SecurityException("无权访问该对话");
         }
         return chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId);
     }
@@ -120,60 +123,60 @@ public class ConversationService {
     @Transactional
     public void deleteConversation(Long conversationId, Long userId) {
         Conversation conversation = conversationRepository.findConversationById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to conversation");
+            throw new SecurityException("无权访问该对话");
         }
 
-        // 1. Delete relations in conversation_documents
+        // 1. 删除 conversation_documents 中的关联关系
         jdbcTemplate.update("DELETE FROM conversation_documents WHERE conversation_id = ?", conversationId);
 
-        // 2. Delete chat messages
+        // 2. 删除聊天消息
         jdbcTemplate.update("DELETE FROM chat_messages WHERE conversation_id = ?", conversationId);
 
-        // 3. Delete conversation itself
+        // 3. 删除对话本身
         conversationRepository.delete(conversation);
     }
 
     /**
-     * Clear all messages from a conversation
-     * @param conversationId The conversation ID
-     * @param userId The user ID
+     * 清除对话中的所有消息
+     * @param conversationId 对话 ID
+     * @param userId 用户 ID
      */
     @Transactional
     public void clearConversationMessages(Long conversationId, Long userId) {
         Conversation conversation = conversationRepository.findConversationById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to conversation");
+            throw new SecurityException("无权访问该对话");
         }
 
-        // Delete all messages for this conversation
+        // 删除该对话的所有消息
         chatMessageRepository.deleteByConversationId(conversationId);
 
-        // Update conversation timestamp
+        // 更新对话时间戳
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationRepository.save(conversation);
     }
 
     /**
-     * Delete a single message
-     * @param messageId The message ID
-     * @param userId The user ID
+     * 删除单条消息
+     * @param messageId 消息 ID
+     * @param userId 用户 ID
      */
     @Transactional
     public void deleteMessage(Long messageId, Long userId) {
-        // Check access and get conversation ID
+        // 检查访问权限并获取对话 ID
         Long conversationId = checkMessageAccess(messageId, userId);
 
-        // Delete the message
+        // 删除消息
         chatMessageRepository.deleteById(messageId);
 
-        // Update conversation timestamp
+        // 更新对话时间戳
         Conversation conversation = conversationRepository.findConversationById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationRepository.save(conversation);
     }
@@ -181,10 +184,10 @@ public class ConversationService {
     @Transactional
     public void addDocumentsToConversation(Long conversationId, Long userId, List<UUID> documentIds) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
         
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to conversation");
+            throw new SecurityException("无权访问该对话");
         }
 
         if (documentIds == null || documentIds.isEmpty()) {
@@ -193,11 +196,11 @@ public class ConversationService {
 
         List<Document> documents = (List<Document>) documentRepository.findAllById(documentIds);
         if (documents.size() != documentIds.size()) {
-             throw new IllegalArgumentException("One or more documents not found");
+             throw new IllegalArgumentException("未找到一个或多个文档");
         }
         for (Document doc : documents) {
              if (doc.getUserId() != null && !doc.getUserId().equals(userId)) {
-                 throw new SecurityException("Access denied to document: " + doc.getId());
+                 throw new SecurityException("无权访问文档：" + doc.getId());
              }
         }
 
@@ -215,10 +218,10 @@ public class ConversationService {
     @Transactional
     public void removeDocumentFromConversation(Long conversationId, Long userId, UUID documentId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to conversation");
+            throw new SecurityException("无权访问该对话");
         }
 
         jdbcTemplate.update("DELETE FROM conversation_documents WHERE conversation_id = ? AND document_id = ?", conversationId, documentId);
@@ -229,13 +232,13 @@ public class ConversationService {
 
     public List<Document> getDocumentsForConversation(Long conversationId, Long userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to conversation");
+            throw new SecurityException("无权访问该对话");
         }
 
-        // Check for parent conversation to inherit documents. Retrieve from both current and parent.
+        // 检查父对话以继承文档。从当前对话和父对话中同时检索。
         Long parentId = conversation.getParentId();
         Long effectiveParentId = parentId != null ? parentId : conversationId;
 
@@ -253,22 +256,27 @@ public class ConversationService {
         return (List<Document>) documentRepository.findAllById(docIds);
     }
 
-    // Keep the blocking chat method for backward compatibility if needed, or remove it.
-    // We will focus on the streaming version.
-
     @Transactional
     public void streamChat(Long conversationId, Long userId, String userMessageContent, SseEmitter emitter) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
         if (!conversation.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied to conversation");
+            throw new SecurityException("无权访问该对话");
         }
 
-        // Idempotency check: prevent duplicate user messages on retry
-        List<ChatMessage> recentMessages = chatMessageRepository.findLatestMessagesByConversationId(conversationId, 10);
+        // 一次性获取对话历史，用于幂等性检查、重写和 LLM 上下文
+        int maxRewriteContext = (ragProperties.retrieval().rewrite() != null && ragProperties.retrieval().rewrite().enabled())
+                ? ragProperties.retrieval().rewrite().maxContextMessages()
+                : 0;
+        int maxHistoryLimit = Math.max(MAX_CONTEXT_MESSAGES, maxRewriteContext);
+        List<ChatMessage> latestMessages = chatMessageRepository.findLatestMessagesByConversationId(conversationId, maxHistoryLimit);
+
+        // 幂等性检查：防止重试时出现重复的用户消息
         ChatMessage existingUserMsg = null;
-        for (ChatMessage msg : recentMessages) {
+        int idempotencyLimit = Math.min(latestMessages.size(), 10);
+        for (int i = 0; i < idempotencyLimit; i++) {
+            ChatMessage msg = latestMessages.get(i);
             if ("USER".equals(msg.getRole())
                     && msg.getContent().equals(userMessageContent)
                     && msg.getCreatedAt().isAfter(LocalDateTime.now().minusSeconds(30))) {
@@ -280,27 +288,27 @@ public class ConversationService {
         if (existingUserMsg != null) {
             log.warn("Duplicate user message detected (ConversationId: {}): {}", conversationId, userMessageContent);
             
-            // Check if there is already an AI response following this message
-            // recentMessages is ordered by created_at DESC (latest first)
-            int index = recentMessages.indexOf(existingUserMsg);
+            // 检查该消息后是否已有 AI 响应
+            // latestMessages 按 created_at DESC 排序（最新的在前）
+            int index = latestMessages.indexOf(existingUserMsg);
             if (index > 0) {
-                ChatMessage potentialAiReply = recentMessages.get(index - 1);
+                ChatMessage potentialAiReply = latestMessages.get(index - 1);
                 if ("ASSISTANT".equals(potentialAiReply.getRole())) {
                     log.info("Found existing AI response, replaying content...");
                     try {
-                        // Replay the full content immediately
+                        // 立即回放完整内容
                         emitter.send(potentialAiReply.getContent(), org.springframework.http.MediaType.TEXT_PLAIN);
                         emitter.complete();
                     } catch (Exception e) {
                         emitter.completeWithError(e);
                     }
-                    return; // Stop further processing
+                    return; // 停止进一步处理
                 }
             }
-            // If no AI response found, we continue processing (e.g. previous attempt failed or is still running)
-            // But we DO NOT save the user message again.
+            // 如果未找到 AI 响应，我们继续处理（例如，之前的尝试失败或仍在运行）
+            // 但我们不会再次保存用户消息。
         } else {
-            // 1. Save user message immediately
+            // 1. 立即保存用户消息
             ChatMessage userChatMessage = new ChatMessage();
             userChatMessage.setConversationId(conversationId);
             userChatMessage.setRole("USER");
@@ -309,8 +317,8 @@ public class ConversationService {
             chatMessageRepository.save(userChatMessage);
         }
 
-        // 2. Prepare Context (Retrieve chunks)
-        // Check for parent conversation to inherit documents. Retrieve from both current and parent.
+        // 2. 准备上下文（检索数据块）
+        // 检查父对话以继承文档。从当前对话和父对话中同时检索。
         Long parentId = conversation.getParentId();
         Long effectiveParentId = parentId != null ? parentId : conversationId;
 
@@ -321,11 +329,26 @@ public class ConversationService {
                 effectiveParentId
         );
 
+        // 如果需要，准备用于重写的按时间顺序排列的历史记录
+        List<ChatMessage> chronologicalHistory = null;
+        if (maxRewriteContext > 0 && !associatedDocumentIds.isEmpty() && !latestMessages.isEmpty()) {
+            chronologicalHistory = latestMessages.stream()
+                    .limit(maxRewriteContext)
+                    .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
+                    .collect(Collectors.toList());
+        }
+
         List<String> relevantTextSegments = new ArrayList<>();
         if (!associatedDocumentIds.isEmpty()) {
+            String searchKeyword = userMessageContent;
+            
+            // 如果启用且存在历史记录，执行上下文查询重写
+            if (chronologicalHistory != null && !chronologicalHistory.isEmpty()) {
+                searchKeyword = queryRewriteService.rewriteIfNecessary(userMessageContent, chronologicalHistory);
+            }
+
             List<Chunk> nearestChunks = qaService.hybridSearch(
-                    userMessageContent,
-                    TOP_K_CHUNKS,
+                    searchKeyword,
                     associatedDocumentIds
             );
 
@@ -334,7 +357,7 @@ public class ConversationService {
                 Chunk chunk = nearestChunks.get(i);
                 relevantTextSegments.add(chunk.getContent());
                 
-                // Log chunk details (limit content preview to 100 chars to avoid log spam)
+                // 记录数据块详情（将内容预览限制为 100 个字符以避免日志泛滥）
                 String contentPreview = chunk.getContent().length() > 100 
                         ? chunk.getContent().substring(0, 100) + "..." 
                         : chunk.getContent();
@@ -342,10 +365,10 @@ public class ConversationService {
             }
         }
 
-        // 3. Prepare Messages
+        // 3. 使用缓存的历史记录准备消息
         List<dev.langchain4j.data.message.ChatMessage> messages = new ArrayList<>();
-        chatMessageRepository.findLatestMessagesByConversationId(conversationId, MAX_CONTEXT_MESSAGES)
-                .stream()
+        latestMessages.stream()
+                .limit(MAX_CONTEXT_MESSAGES)
                 .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
                 .map(msg -> {
                     if ("USER".equals(msg.getRole())) {
@@ -356,6 +379,7 @@ public class ConversationService {
                         return null;
                     }
                 })
+                .filter(java.util.Objects::nonNull)
                 .forEach(messages::add);
 
         messages.addFirst(SystemMessage.systemMessage("You are a helpful assistant. Answer questions based on the provided context."));
@@ -364,18 +388,18 @@ public class ConversationService {
                 "" : "Context:\n" + String.join("\n---\n", relevantTextSegments);
         messages.add(new UserMessage(context + "\n\nQuestion: " + userMessageContent));
 
-        // Log the full prompt sent to LLM
+        // 记录发送给 LLM 的完整提示词
         log.info("Sending request to LLM (ConversationId: {}). Total Messages: {}", conversationId, messages.size());
         for (int i = 0; i < messages.size(); i++) {
             dev.langchain4j.data.message.ChatMessage msg = messages.get(i);
-            // Limit log length for very long messages (like the one with context)
+            // 限制超长消息的日志长度（例如带有上下文的消息）
             String text;
             switch (msg) {
                 case UserMessage userMsg -> {
                     if (userMsg.hasSingleText()) {
                         text = userMsg.singleText();
                     } else {
-                        // Fallback for multi-modal messages, or log a warning
+                        // 多模态消息的备选方案，或记录警告
                         text = userMsg.contents().stream()
                                 .filter(content -> content instanceof TextContent)
                                 .map(content -> ((TextContent) content).text())
@@ -392,7 +416,7 @@ public class ConversationService {
             log.info("  [Msg {} - {}] {}", i, msg.type(), text);
         }
 
-        // 4. Stream Response
+        // 4. 流式响应
         openAiStreamingChatModel.chat(messages, new StreamingChatResponseHandler() {
             @Override
             public void onPartialResponse(String token) {
@@ -406,7 +430,7 @@ public class ConversationService {
             @Override
             public void onCompleteResponse(ChatResponse response) {
                 log.info("LLM Final Response (ConversationId: {}): \n{}", conversationId, response.aiMessage().text());
-                // Save AI message to DB after completion
+                // 完成后将 AI 消息保存到数据库
                 ChatMessage aiChatMessage = new ChatMessage();
                 aiChatMessage.setConversationId(conversationId);
                 aiChatMessage.setRole("ASSISTANT");
@@ -414,7 +438,7 @@ public class ConversationService {
                 aiChatMessage.setCreatedAt(LocalDateTime.now());
                 chatMessageRepository.save(aiChatMessage);
 
-                // Update conversation timestamp
+                // 更新对话时间戳
                 conversation.setUpdatedAt(LocalDateTime.now());
                 conversationRepository.save(conversation);
                 
@@ -431,19 +455,19 @@ public class ConversationService {
     @Transactional
     public void toggleConversationPublicStatus(Long conversationId, boolean isPublic, String allowedUsers, Long userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
         if (!isAdmin(userId)) {
-            throw new SecurityException("Only administrators can manage public assistants");
+            throw new SecurityException("只有管理员可以管理公共助手");
         }
         
-        // Only non-child conversations can be made public. A child conversation always follows its parent.
+        // 只有非子对话可以设为公开。子对话始终遵循其父对话。
         if (conversation.getParentId() != null && isPublic) {
-            throw new IllegalArgumentException("Child conversations cannot be made public directly.");
+            throw new IllegalArgumentException("子对话不能直接设为公开。");
         }
 
         conversation.setPublic(isPublic);
-        conversation.setAllowedUsers(allowedUsers); // Update whitelist
+        conversation.setAllowedUsers(allowedUsers); // 更新白名单
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationRepository.save(conversation);
     }

@@ -28,7 +28,7 @@ public class WebSocketJwtChannelInterceptor implements ChannelInterceptor {
             List<String> authorization = accessor.getNativeHeader("Authorization");
             String token = null;
             if (authorization != null && !authorization.isEmpty()) {
-                String authHeader = authorization.get(0);
+                String authHeader = authorization.getFirst();
                     if (authHeader != null && authHeader.startsWith("Bearer ")) {
                     token = authHeader.substring(7);
                 }
@@ -36,10 +36,10 @@ public class WebSocketJwtChannelInterceptor implements ChannelInterceptor {
 
             if (token != null && jwtUtil.validateToken(token)) {
                 Long userId = jwtUtil.getUserIdFromToken(token);
-                // Store userId in WebSocket session attributes
+                // 将 userId 存储在 WebSocket 会话属性中
                 accessor.getSessionAttributes().put("userId", userId);
                 
-                // Set the User Principal so convertAndSendToUser works
+                // 设置 User Principal，以便 convertAndSendToUser 能够正常工作
                 accessor.setUser(new java.security.Principal() {
                     @Override
                     public String getName() {
@@ -47,8 +47,8 @@ public class WebSocketJwtChannelInterceptor implements ChannelInterceptor {
                     }
                 });
             } else {
-                // If token is invalid or missing, deny connection
-                throw new IllegalArgumentException("Unauthorized connection");
+                // 如果令牌无效或缺失，则拒绝连接
+                throw new IllegalArgumentException("未授权的连接");
             }
         }
         return message;

@@ -11,7 +11,7 @@ public class AsyncConfig {
 
     @Bean(name = "searchExecutor")
     public Executor searchExecutor() {
-        // Since we are on Java 21, we can directly use Virtual Threads
+        // 既然使用的是 Java 21，我们可以直接使用虚拟线程
         return Executors.newVirtualThreadPerTaskExecutor();
     }
 }

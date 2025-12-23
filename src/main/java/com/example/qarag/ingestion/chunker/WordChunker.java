@@ -39,7 +39,7 @@ public class WordChunker implements DocumentChunker {
 
     @Override
     public List<TextSegment> chunk(Path filePath) {
-        log.debug("Using WordChunker for document: {}", filePath.getFileName());
+        log.debug("对文档使用 WordChunker: {}", filePath.getFileName());
 
         String filename = filePath.getFileName().toString().toLowerCase();
         
@@ -48,8 +48,8 @@ public class WordChunker implements DocumentChunker {
             try {
                 return processDocx(filePath);
             } catch (Exception e) {
-                log.error("Failed to process .docx structually, falling back to plain text: {}", e.getMessage());
-                // Fallback to plain text if structural parsing fails
+                log.error("结构化处理 .docx 失败，回退到纯文本提取: {}", e.getMessage());
+                // 如果结构化解析失败，回退到纯文本
             }
         }
 
@@ -156,7 +156,7 @@ public class WordChunker implements DocumentChunker {
                         descriptions.add(desc);
                     }
                 } catch (Exception e) {
-                    log.warn("Failed to analyze image in Word doc: {}", e.getMessage());
+                    log.warn("分析 Word 文档中的图片失败: {}", e.getMessage());
                 }
             }
         }
@@ -235,8 +235,8 @@ public class WordChunker implements DocumentChunker {
         try (InputStream is = new FileInputStream(filePath.toFile())) {
             document = new ApachePoiDocumentParser().parse(is);
         } catch (IOException e) {
-            log.error("Failed to parse Word file: {}", filePath, e);
-            throw new RuntimeException("Failed to parse Word file", e);
+            log.error("解析 Word 文件失败: {}", filePath, e);
+            throw new RuntimeException("解析 Word 文件失败", e);
         }
 
         DocumentSplitter splitter = DocumentSplitters.recursive(

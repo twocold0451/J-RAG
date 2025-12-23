@@ -15,7 +15,7 @@ import java.util.UUID;
 public class DocumentService {
 
     private final DocumentRepository documentRepository;
-    private final UserRepository userRepository; // Add UserRepository
+    private final UserRepository userRepository; // 添加 UserRepository
 
     public DocumentService(DocumentRepository documentRepository, UserRepository userRepository) {
         this.documentRepository = documentRepository;
@@ -33,10 +33,10 @@ public class DocumentService {
         document.setName(fileName);
         document.setUserId(userId);
         document.setUploadedAt(OffsetDateTime.now());
-        document.setPublic(isPublic); // Set the new isPublic field
-        document.setStatus(DocumentStatus.PENDING); // Initial status
-        document.setProgress(0); // Initial progress
-        document.setNew(true); // Explicitly mark as new
+        document.setPublic(isPublic); // 设置新的 isPublic 字段
+        document.setStatus(DocumentStatus.PENDING); // 初始状态
+        document.setProgress(0); // 初始进度
+        document.setNew(true); // 明确标记为新记录
         return documentRepository.save(document);
     }
 
@@ -60,13 +60,13 @@ public class DocumentService {
     @Transactional
     public void deleteDocument(UUID documentId, Long userId) {
         Document document = documentRepository.findById(documentId)
-                .orElseThrow(() -> new IllegalArgumentException("Document not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到文档"));
 
         boolean isOwner = userId.equals(document.getUserId());
         boolean isAdmin = isAdmin(userId);
 
         if (!isOwner && !isAdmin) {
-            throw new SecurityException("Access denied to document");
+            throw new SecurityException("无权访问该文档");
         }
 
         documentRepository.delete(document);
@@ -75,10 +75,10 @@ public class DocumentService {
     @Transactional
     public void toggleDocumentPublicStatus(UUID documentId, boolean isPublic, Long userId) {
         Document document = documentRepository.findById(documentId)
-                .orElseThrow(() -> new IllegalArgumentException("Document not found"));
+                .orElseThrow(() -> new IllegalArgumentException("未找到文档"));
 
         if (!isAdmin(userId)) {
-            throw new SecurityException("Only administrators can manage public documents");
+            throw new SecurityException("只有管理员可以管理公共文档");
         }
 
         document.setPublic(isPublic);

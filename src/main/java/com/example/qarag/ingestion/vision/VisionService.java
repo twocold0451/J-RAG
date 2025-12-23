@@ -49,7 +49,7 @@ public class VisionService {
      */
     public String analyzeImage(BufferedImage image, String prompt) {
         if (!isEnabled()) {
-            log.warn("Vision service is not enabled or configured");
+            log.warn("视觉服务未启用或未配置");
             return "[视觉模型未启用]";
         }
 
@@ -118,7 +118,7 @@ public class VisionService {
 
         try {
             int payloadSizeKB = base64Image.length() / 1024;
-            log.info("Calling Google Gemini API. Image size: {} KB. Model: {}", payloadSizeKB, config.modelName());
+            log.info("正在调用 Google Gemini API。图片大小：{} KB。模型：{}", payloadSizeKB, config.modelName());
 
             long startTime = System.currentTimeMillis();
             ResponseEntity<String> response = restTemplate.exchange(
@@ -127,23 +127,23 @@ public class VisionService {
                     request,
                     String.class);
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Google Gemini API call completed in {} ms. Status: {}", duration, response.getStatusCode());
+            log.info("Google Gemini API 调用完成，耗时 {} 毫秒。状态：{}", duration, response.getStatusCode());
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 try {
                     Map<String, Object> bodyMap = objectMapper.readValue(response.getBody(), Map.class);
                     return extractContentFromGoogleResponse(bodyMap);
                 } catch (Exception e) {
-                    log.error("Failed to parse JSON response from Google Gemini API. Raw response: {}", response.getBody());
-                    throw new RuntimeException("Google Gemini API returned invalid JSON", e);
+                    log.error("解析 Google Gemini API 的 JSON 响应失败。原始响应：{}", response.getBody());
+                    throw new RuntimeException("Google Gemini API 返回了无效的 JSON", e);
                 }
             } else {
-                log.error("Google Gemini API returned non-success status: {}. Body: {}", response.getStatusCode(), response.getBody());
+                log.error("Google Gemini API 返回了非成功状态：{}。正文：{}", response.getStatusCode(), response.getBody());
                 return "[视觉模型 请求失败]";
             }
         } catch (Exception e) {
-            log.error("Google Gemini API call failed: {}", e.getMessage());
-            throw new RuntimeException("Google Gemini API call failed", e);
+            log.error("Google Gemini API 调用失败：{}", e.getMessage());
+            throw new RuntimeException("Google Gemini API 调用失败", e);
         }
     }
 
@@ -177,7 +177,7 @@ public class VisionService {
 
         // Log approximate payload size
         int payloadSizeKB = base64Image.length() / 1024;
-        log.info("Preparing Vision API request (OpenAI Compatible). Image Base64 size: {} KB. Model: {}", payloadSizeKB, config.modelName());
+        log.info("正在准备视觉 API 请求 (OpenAI 兼容)。图片 Base64 大小：{} KB。模型：{}", payloadSizeKB, config.modelName());
 
         // 构建 OpenAI 视觉模型 格式的请求
         Map<String, Object> requestBody = Map.of(
@@ -194,7 +194,7 @@ public class VisionService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
         try {
-            log.debug("Calling Vision API: {} with model {}", url, config.modelName());
+            log.debug("正在调用视觉 API：{}，使用模型：{}", url, config.modelName());
 
             long startTime = System.currentTimeMillis();
             ResponseEntity<String> response = restTemplate.exchange(
@@ -203,23 +203,23 @@ public class VisionService {
                     request,
                     String.class);
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Vision API call completed in {} ms. Status: {}", duration, response.getStatusCode());
+            log.info("视觉 API 调用完成，耗时 {} 毫秒。状态：{}", duration, response.getStatusCode());
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 try {
                     Map<String, Object> bodyMap = objectMapper.readValue(response.getBody(), Map.class);
                     return extractContentFromResponse(bodyMap);
                 } catch (Exception e) {
-                    log.error("Failed to parse JSON response from Vision API. Raw response: {}", response.getBody());
-                    throw new RuntimeException("Vision API returned invalid JSON", e);
+                    log.error("解析来自视觉 API 的 JSON 响应失败。原始响应：{}", response.getBody());
+                    throw new RuntimeException("视觉 API 返回了无效的 JSON", e);
                 }
             } else {
-                log.error("Vision API returned non-success status: {}. Body: {}", response.getStatusCode(), response.getBody());
+                log.error("视觉 API 返回了非成功状态：{}。正文：{}", response.getStatusCode(), response.getBody());
                 return "[视觉模型 请求失败]";
             }
         } catch (Exception e) {
-            log.error("Vision API call failed: {}", e.getMessage());
-            throw new RuntimeException("Vision API call failed", e);
+            log.error("视觉 API 调用失败：{}", e.getMessage());
+            throw new RuntimeException("视觉 API 调用失败", e);
         }
     }
 

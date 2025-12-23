@@ -53,7 +53,7 @@ public class TextProcessor implements PdfElementProcessor {
                     stripper.addRegion("textRegion" + regionIndex++, region);
                 }
 
-                log.debug("Page {}: extracting {} text regions, excluding {} regions",
+                log.debug("第 {} 页：正在提取 {} 个文本区域，排除了 {} 个区域",
                         pageNumber, textRegions.size(), excludeRegions.size());
             }
 
@@ -76,12 +76,12 @@ public class TextProcessor implements PdfElementProcessor {
                 return PdfElementResult.empty(PdfElementType.TEXT, pageNumber);
             }
 
-            log.debug("Extracted {} characters from page {} (excluded {} regions)",
+            log.debug("从第 {} 页提取了 {} 个字符 (排除了 {} 个区域)",
                     text.length(), pageNumber, excludeRegions.size());
             return PdfElementResult.success(text, PdfElementType.TEXT, pageNumber);
 
         } catch (Exception e) {
-            log.error("Failed to extract text from page {}: {}", pageNumber, e.getMessage());
+            log.error("从第 {} 页提取文本失败: {}", pageNumber, e.getMessage());
             return PdfElementResult.failure(PdfElementType.TEXT, pageNumber, e.getMessage());
         }
     }

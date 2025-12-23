@@ -36,7 +36,7 @@ public class PdfChunker implements DocumentChunker {
 
     @Override
     public List<TextSegment> chunk(Path filePath) {
-        log.debug("Using PdfChunker for PDF document: {}", filePath.getFileName());
+        log.debug("对 PDF 文档使用 PdfChunker: {}", filePath.getFileName());
 
         List<TextSegment> segments = new ArrayList<>();
         long startTime = System.currentTimeMillis();
@@ -46,16 +46,16 @@ public class PdfChunker implements DocumentChunker {
             
             // 检查文档是否加密
             if (pdfDoc.isEncrypted()) {
-                log.info("PDF is encrypted: {}", filePath.getFileName());
+                log.info("PDF 已加密: {}", filePath.getFileName());
                 AccessPermission ap = pdfDoc.getCurrentAccessPermission();
                 if (!ap.canExtractContent()) {
-                    log.warn("Cannot process encrypted PDF without content extraction permission: {}", filePath.getFileName());
-                    throw new IOException("PDF is encrypted and content extraction is disabled");
+                    log.warn("没有提取权限，无法处理加密的 PDF: {}", filePath.getFileName());
+                    throw new IOException("PDF 已加密且禁用了内容提取");
                 }
             }
             
             int totalPages = pdfDoc.getNumberOfPages();
-            log.info("PDF has {} pages, processing with element processors", totalPages);
+            log.info("PDF 共有 {} 页，正在使用元素处理器进行处理", totalPages);
 
             DocumentSplitter splitter = DocumentSplitters.recursive(
                     ragProperties.chunking().size(),
@@ -83,7 +83,7 @@ public class PdfChunker implements DocumentChunker {
                         .distinct()
                         .collect(Collectors.joining(", "));
                 
-                log.debug("Page {} processed elements: {}", pageNum, elementTypes);
+                log.debug("第 {} 页处理的元素类型: {}", pageNum, elementTypes);
 
                 // 如果单页内容超过 chunk size，进行二次切分
                 if (pageContent.length() > ragProperties.chunking().size()) {
@@ -109,15 +109,15 @@ public class PdfChunker implements DocumentChunker {
             }
 
             long duration = System.currentTimeMillis() - startTime;
-            log.info("PdfChunker finished processing {} pages in {} ms. Produced {} segments.", 
+            log.info("PdfChunker 完成了对 {} 页的处理，耗时 {} 毫秒。生成了 {} 个片段。", 
                     totalPages, duration, segments.size());
 
         } catch (InvalidPasswordException e) {
-            log.error("Failed to process PDF file (Password Required): {}", filePath, e);
-            throw new RuntimeException("Cannot process encrypted PDF: Password required", e);
+            log.error("处理 PDF 文件失败 (需要密码): {}", filePath, e);
+            throw new RuntimeException("无法处理加密的 PDF: 需要密码", e);
         } catch (IOException e) {
-            log.error("Failed to process PDF file: {}", filePath, e);
-            throw new RuntimeException("Failed to process PDF file", e);
+            log.error("处理 PDF 文件失败: {}", filePath, e);
+            throw new RuntimeException("处理 PDF 文件失败", e);
         }
 
         return segments;

@@ -113,7 +113,7 @@ public class ConversationController {
             @PathVariable Long conversationId,
             @CurrentUser Long userId,
             @RequestBody ChatRequest request) {
-        // Timeout set to 3 minutes (180000 ms) to accommodate long generations
+        // 超时时间设置为 3 分钟 (180000 毫秒)，以适应较长的生成过程
         org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter = new org.springframework.web.servlet.mvc.method.annotation.SseEmitter(180000L);
         conversationService.streamChat(conversationId, userId, request.getMessage(), emitter);
         return emitter;

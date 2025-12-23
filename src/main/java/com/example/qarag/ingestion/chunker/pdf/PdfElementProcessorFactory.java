@@ -51,11 +51,11 @@ public class PdfElementProcessorFactory {
         List<PdfElementProcessor> applicableProcessors = getProcessorsForPage(document, pageNumber);
 
         if (applicableProcessors.isEmpty()) {
-            log.warn("No processor found for page {}", pageNumber);
+            log.warn("未找到第 {} 页的处理器", pageNumber);
             return List.of();
         }
 
-        log.debug("Found {} processors for page {}: {}",
+        log.debug("找到第 {} 页的 {} 个处理器：{}",
                 applicableProcessors.size(),
                 pageNumber,
                 applicableProcessors.stream()
@@ -68,8 +68,8 @@ public class PdfElementProcessorFactory {
         // 按优先级依次处理，传递已处理的区域
         for (PdfElementProcessor processor : applicableProcessors) {
             try {
-                log.debug("Processing page {} with {} (excluding {} regions)",
-                        pageNumber, processor.supportedType(), excludeRegions.size());
+                log.debug("正在使用 {} 处理第 {} 页 (排除了 {} 个区域)",
+                        processor.supportedType(), pageNumber, excludeRegions.size());
 
                 PdfElementResult result = processor.process(document, pageNumber, excludeRegions);
 
@@ -79,12 +79,12 @@ public class PdfElementProcessorFactory {
                     // 将此处理器处理过的区域加入排除列表
                     if (result.processedRegions() != null && !result.processedRegions().isEmpty()) {
                         excludeRegions.addAll(result.processedRegions());
-                        log.debug("Added {} regions to exclude list from {}",
+                        log.debug("已将来自 {} 的 {} 个区域添加到排除列表",
                                 result.processedRegions().size(), processor.supportedType());
                     }
                 }
             } catch (Exception e) {
-                log.error("Processor {} failed for page {}: {}",
+                log.error("处理器 {} 在处理第 {} 页时失败：{}",
                         processor.supportedType(), pageNumber, e.getMessage());
                 results.add(PdfElementResult.failure(processor.supportedType(), pageNumber, e.getMessage()));
             }

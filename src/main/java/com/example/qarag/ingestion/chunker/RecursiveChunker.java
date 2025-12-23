@@ -33,7 +33,7 @@ public class RecursiveChunker implements DocumentChunker {
 
     @Override
     public List<TextSegment> chunk(Path filePath) {
-        log.debug("Using RecursiveChunker with size={}, overlap={}",
+        log.debug("使用 RecursiveChunker，大小={}，重叠={}",
                 ragProperties.chunking().size(),
                 ragProperties.chunking().overlap());
 
@@ -49,8 +49,8 @@ public class RecursiveChunker implements DocumentChunker {
 
             document = Document.from(new String(bytes, Charset.forName(encoding)));
         } catch (IOException e) {
-            log.error("Failed to read file: {}", filePath, e);
-            throw new RuntimeException("Failed to read file", e);
+            log.error("读取文件失败: {}", filePath, e);
+            throw new RuntimeException("读取文件失败", e);
         }
 
         DocumentSplitter splitter = DocumentSplitters.recursive(

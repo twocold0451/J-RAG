@@ -57,8 +57,8 @@ public class ExcelChunker implements DocumentChunker {
             }
 
         } catch (Exception e) {
-            log.error("Failed to process Excel file: {}", filePath, e);
-            throw new RuntimeException("Failed to process Excel file", e);
+            log.error("处理 Excel 文件失败: {}", filePath, e);
+            throw new RuntimeException("处理 Excel 文件失败", e);
         }
 
         return allSegments;
@@ -230,13 +230,13 @@ public class ExcelChunker implements DocumentChunker {
                     BufferedImage image = ImageIO.read(new ByteArrayInputStream(data));
                     if (image == null) continue; // 非图片数据
 
-                    log.debug("Analyzing image in sheet '{}' at row {}", sheet.getSheetName(), row);
+                    log.debug("正在分析工作表 '{}' 第 {} 行的图片", sheet.getSheetName(), row);
                     String description = visionService.analyzeImage(image, "请详细描述这张图片的内容。如果它是一个图表（如柱状图、折线图、饼图等），请提取其中的关键数据、趋势和图例信息。如果是表格截图，请尝试还原数据。");
                     
                     descriptions.computeIfAbsent(row, k -> new ArrayList<>()).add(description);
                     
                 } catch (Exception e) {
-                    log.warn("Failed to process image in sheet '{}' at row {}: {}", 
+                    log.warn("处理工作表 '{}' 第 {} 行的图片失败: {}", 
                             sheet.getSheetName(), row, e.getMessage());
                 }
             }
