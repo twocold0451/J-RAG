@@ -102,6 +102,80 @@ npm run dev
 
 ## 🏗️ 架构设计
 
+### 🔍 混合检索与查询优化流程
+
+```mermaid
+graph TD
+    User([用户提问]) --> Rewrite{查询重写服务}
+    
+    subgraph "1. 查询优化阶段 (LLM)"
+        Rewrite -- 包含上下文/噪声 --> LLM_Rewrite[LLM 重写与智能去噪]
+        Rewrite -- 语义完整 --> Original_Query[保留原始查询]
+        LLM_Rewrite --> Cleaned_Query[优化后的检索词]
+        Original_Query --> Cleaned_Query
+    end
+
+    Cleaned_Query --> Search_Parallel{并行双路检索}
+
+    subgraph "2. 召回阶段 (Initial Recall)"
+        subgraph "向量检索 (Initial Top-K)"
+            Search_Parallel --> Embedding[Embedding 向量化]
+            Embedding --> Vector_DB[(pgvector)]
+            Vector_DB --> MMR[MMR 多样性筛选]
+        end
+
+        subgraph "全文检索 (Initial Top-K)"
+            Search_Parallel --> Jieba[Jieba 分词 + 过滤]
+            Jieba --> FTS_DB[(TSVector)]
+        end
+    end
+
+    MMR --> Decision{开启重排序?}
+    FTS_DB --> Decision
+
+    subgraph "3. 融合与精排阶段 (Rerank / Fusion)"
+        Decision -- 是 --> Rerank[<b>Cross-Encoder 重排模型</b>]
+        Decision -- 否 --> RRF[RRF 排名融合]
+        Rerank --> Top_K[精选最终 Top-K 片段]
+        RRF --> Top_K
+    end
+
+    subgraph "4. 生成阶段 (LLM)"
+        Top_K --> Context[组装上下文 + 来源引用]
+        Context --> LLM_Gen[LLM 生成回答]
+    end
+
+    LLM_Gen --> Final_Response([最终回答 + 溯源])
+```
+
+J-RAG 采用了一套精密的检索管道 (Retrieval Pipeline)，确保系统能够理解复杂的对话上下文并从海量文档中精准定位信息：
+
+1.  **查询重写与智能去噪 (Query Rewrite & Denoise)**
+    - **上下文补全**：利用 LLM 分析最近 $N$ 轮对话历史，将用户模糊的提问（如“它的原理是什么？”）改写为独立完整的语义查询。
+    - **搜索去噪**：LLM 自动剔除“我想知道”、“麻烦分析一下”等对检索无意义的噪声词，仅保留核心检索关键词，大幅提升全文检索的精确度。
+
+2.  **并行双路搜索 (Parallel Dual-Path Search)**
+    - **语义向量搜索 (Vector Search)**：将查询转换为高维向量，利用 `pgvector` 计算余弦相似度。这负责捕获“意思相近但词语不同”的相关内容。
+    - **关键词全文检索 (Keyword Search)**：利用 PostgreSQL 的 TSVector 功能进行倒排索引查找。
+        - **分词增强**：系统在检索前使用 `Jieba` 对查询进行精细分词，并过滤自定义停用词。
+        - **索引模式**：使用 `websearch_to_tsquery` 以支持类似 Google 的自然语言检索语法。
+
+3.  **重排序与结果精选 (Re-ranking & Selection)**
+
+    - **两阶段漏斗模型**：系统首先从双路搜索中获取较多数量的候选片段（由 `initial-top-k` 配置，如 20-50 个），确保不遗漏潜在答案。
+
+    - **高精度重排**：如果开启重排序，系统将调用专用的 Cross-Encoder 模型对这数十个候选片段进行深度语义匹配打分，最后仅精选出最相关的 Top-K 个（由 `top-k` 配置，如 5 个）返回给用户。
+
+    - **逻辑互斥**：开启重排序后将自动替代 RRF 算法，以获得更高的语义匹配精度。
+
+
+
+4.  **生成回答 (Augmented Generation)**
+    - 将优化后的上下文片段送入 LLM，要求模型严格基于背景知识回答，并在回答中通过 `[文件名:页码]` 形式标注引用来源。
+
+> **💡 提示：全文检索不到结果？**
+> 在中文环境下，全文检索依赖于正确的索引分词。如果您的全文检索在显示“找到结果”但结果不相关，请检查数据库中的 `content_search` 字段是否在入库时进行了正确的预分词处理。本项目默认使用 `simple` 配置配合 `Jieba` 预处理，若检索不理想，可考虑在数据库层面集成 `zhparser` 插件。
+
 ### 文档切分策略 (Dual-Layer Chunking)
 J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 
@@ -123,8 +197,8 @@ J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 ## 📅 路线图 (Roadmap)
 
 ### 🚀 核心 RAG 优化
-- [ ] **重排序 (Re-ranking)**: 引入两阶段检索 (Retrieve -> Rerank)，利用 `bge-reranker` 等模型对 Top-K 结果进行精细排序，大幅提升准确率。
-- [ ] **上下文查询重写 (Query Rewriting)**: 利用 LLM 改写用户查询，解决多轮对话中的指代消解和意图模糊问题。
+- [x] **重排序 (Re-ranking)**: 引入两阶段检索 (Retrieve -> Rerank)，利用 `bge-reranker` 等模型对 Top-K 结果进行精细排序，大幅提升准确率。
+- [x] **上下文查询重写 (Query Rewriting)**: 利用 LLM 改写用户查询，解决多轮对话中的指代消解和意图模糊问题。
 - [ ] **图谱增强 RAG (Graph RAG)**: 构建知识图谱 (Knowledge Graph)，支持多跳推理和复杂实体关系查询。
 
 ### 📄 数据摄取增强
