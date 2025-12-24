@@ -3,14 +3,13 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 import useAppStore from '../store/useAppStore';
 import ConfirmModal from './ConfirmModal';
-import { BiTrash, BiCheck, BiCloudUpload, BiFile, BiX, BiPlus, BiChevronDown } from 'react-icons/bi';
+import { BiTrash, BiCheck, BiCloudUpload, BiFile, BiX, BiPlus, BiChevronDown, BiLink } from 'react-icons/bi';
 import { format } from 'date-fns';
 
 function DocumentManager({ isOpen, onClose }) {
   const {
     documents,
     setDocuments,
-    addDocument,
     removeDocument,
     selectedConversation,
     currentConversationDocuments,
@@ -26,10 +25,12 @@ function DocumentManager({ isOpen, onClose }) {
   const [selectedDocs, setSelectedDocs] = useState(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [documentViewFilter, setDocumentViewFilter] = useState('MY');
+  const [uploadMode, setUploadMode] = useState('FILE'); // 'FILE' or 'URL'
+  const [urlInput, setUrlInput] = useState('');
+  
   const fileInputRef = useRef(null);
-  const dropdownButtonRef = useRef(null);
-
-  const [modalConfig, setModalConfig] = useState({ 
+  useRef(null);
+  const [modalConfig, setModalConfig] = useState({
     isOpen: false, 
     title: '', 
     message: '', 
@@ -98,6 +99,41 @@ function DocumentManager({ isOpen, onClose }) {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUrlIngest = async () => {
+    if (!urlInput.trim()) {
+      toast.error('请输入有效的 URL');
+      return;
+    }
+
+    // Basic URL validation
+    try {
+      new URL(urlInput);
+    } catch (_) {
+      toast.error('URL 格式不正确，请包含 http:// 或 https://');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const response = await api.post('/ingest-url', {
+        url: urlInput,
+        isPublic: false
+      });
+      fetchDocuments();
+      toast.success('URL 提交成功，正在后台抓取');
+      setUrlInput('');
+
+      if (selectedConversation && response.data.documentId) {
+          await handleToggleConversationDoc(response.data.documentId, true);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('URL 提交失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -322,26 +358,78 @@ function DocumentManager({ isOpen, onClose }) {
             )}
           </div>
 
-          {/* Upload Area */}
-          <div
-            className="border-2 border-dashed border-base-300 rounded-xl p-8 mb-8 text-center cursor-pointer hover:border-primary hover:bg-base-50 transition-all group hover:shadow-lg"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input
-              type="file"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".txt,.pdf,.md,.html"
-            />
-            {uploading ? (
-              <span className="loading loading-spinner loading-lg text-primary"></span>
+          {/* Import/Upload Section with Tabs */}
+          <div className="mb-8">
+            <div className="tabs tabs-boxed bg-base-200 mb-4 inline-flex">
+              <a 
+                className={`tab ${uploadMode === 'FILE' ? 'tab-active' : ''}`}
+                onClick={() => setUploadMode('FILE')}
+              >
+                <BiCloudUpload className="mr-2" /> 上传文件
+              </a>
+              <a 
+                className={`tab ${uploadMode === 'URL' ? 'tab-active' : ''}`}
+                onClick={() => setUploadMode('URL')}
+              >
+                <BiLink className="mr-2" /> 网页链接
+              </a>
+            </div>
+
+            {uploadMode === 'FILE' ? (
+              /* Upload Area */
+              <div
+                className="border-2 border-dashed border-base-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary hover:bg-base-50 transition-all group hover:shadow-lg"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".txt,.pdf,.md,.html"
+                />
+                {uploading ? (
+                  <span className="loading loading-spinner loading-lg text-primary"></span>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 group-hover:scale-105 transition-transform duration-300">
+                    <BiCloudUpload className="w-16 h-16 text-base-content/40 group-hover:text-primary transition-colors" />
+                    <div>
+                      <p className="font-semibold text-base-content">点击上传新文档</p>
+                      <p className="text-sm text-base-content/60 mt-1">支持 TXT, PDF, MD, HTML (最大 10MB)</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 group-hover:scale-105 transition-transform duration-300">
-                <BiCloudUpload className="w-16 h-16 text-base-content/40 group-hover:text-primary transition-colors" />
-                <div>
-                  <p className="font-semibold text-base-content">点击上传新文档</p>
-                  <p className="text-sm text-base-content/60 mt-1">支持 TXT, PDF, MD, HTML (最大 10MB)</p>
+              /* URL Input Area */
+              <div className="border-2 border-dashed border-base-300 rounded-xl p-8 hover:border-primary hover:bg-base-50 transition-all group hover:shadow-lg">
+                <div className="max-w-xl mx-auto flex flex-col items-center gap-4">
+                  <div className="w-full">
+                    <div className="join w-full">
+                      <div className="join-item flex items-center justify-center bg-base-200 px-4 border border-base-300 border-r-0">
+                        <BiLink className="text-xl text-base-content/60" />
+                      </div>
+                      <input 
+                        type="url" 
+                        className="input input-bordered join-item w-full focus:outline-offset-0" 
+                        placeholder="https://example.com/article"
+                        value={urlInput}
+                        onChange={(e) => setUrlInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleUrlIngest()}
+                        disabled={uploading}
+                      />
+                      <button 
+                        className="btn btn-primary join-item"
+                        onClick={handleUrlIngest}
+                        disabled={uploading}
+                      >
+                        {uploading ? <span className="loading loading-spinner loading-xs"></span> : '抓取'}
+                      </button>
+                    </div>
+                    <label className="label">
+                      <span className="label-text-alt text-base-content/60">输入包含文章内容的网页地址，系统将自动抓取并处理</span>
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
@@ -349,6 +437,7 @@ function DocumentManager({ isOpen, onClose }) {
 
           {/* Document List */}
           <div>
+
              <div className="flex items-center justify-between mb-6">
                 <h4 className="font-bold text-lg flex items-center gap-2 text-base-content">
                     <BiFile className="text-primary" /> 所有文档

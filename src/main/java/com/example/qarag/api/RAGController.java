@@ -31,6 +31,32 @@ public class RAGController {
     private final IngestionService ingestionService;
     private final QAService qaService;
     private final DocumentService documentService;
+    private final com.example.qarag.ingestion.crawler.WebCrawlerService webCrawlerService;
+
+    @PostMapping("/ingest-url")
+    public ResponseEntity<UploadResponse> ingestUrl(
+            @RequestBody com.example.qarag.api.dto.UrlIngestRequest request,
+            @CurrentUser Long userId) {
+        try {
+            // 1. 抓取网页内容
+            var result = webCrawlerService.fetchAndSave(request.url());
+            
+            // 2. 创建文档记录 (使用网页标题作为文件名)
+            // 注意：我们在文件名后追加 .md 后缀，以确保 DocumentChunkerFactory 能正确选择 MarkdownChunker
+            String fileName = result.title() + ".md";
+            Document document = documentService.createDocument(fileName, userId, request.isPublic());
+            
+            // 3. 触发异步入库
+            ingestionService.startIngestion(document.getId(), result.tempFile(), userId, request.isPublic());
+            
+            return ResponseEntity.ok(new UploadResponse(document.getId(), "网页抓取成功，正在后台处理中。", request.isPublic()));
+            
+        } catch (Exception e) {
+            log.error("网页摄取失败: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body(new UploadResponse(null, "网页摄取失败: " + e.getMessage(), request.isPublic()));
+        }
+    }
 
     @PutMapping("/documents/{id}/public")
     public ResponseEntity<Void> togglePublicStatus(
