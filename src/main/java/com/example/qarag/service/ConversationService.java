@@ -38,7 +38,6 @@ import lombok.extern.slf4j.Slf4j;
 public class ConversationService {
 
     private static final int MAX_CONTEXT_MESSAGES = 10;
-    private static final int TOP_K_CHUNKS = 5;
 
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -48,6 +47,7 @@ public class ConversationService {
     private final JdbcTemplate jdbcTemplate;
     private final QAService qaService;
     private final QueryRewriteService queryRewriteService;
+    private final QueryDecompositionService queryDecompositionService;
     private final RagProperties ragProperties;
 
     private boolean isAdmin(Long userId) {
@@ -347,12 +347,16 @@ public class ConversationService {
                 searchKeyword = queryRewriteService.rewriteIfNecessary(userMessageContent, chronologicalHistory);
             }
 
-            List<Chunk> nearestChunks = qaService.hybridSearch(
-                    searchKeyword,
+            // 2. 查询分解 (分解为子查询列表)
+            List<String> subQueries = queryDecompositionService.decompose(searchKeyword);
+
+            // 3. 批量混合检索
+            List<Chunk> nearestChunks = qaService.batchHybridSearch(
+                    subQueries,
                     associatedDocumentIds
             );
 
-            log.info("RAG Search Results (ConversationId: {}): Found {} chunks.", conversationId, nearestChunks.size());
+            log.info("RAG Search Results (ConversationId: {}): Found {} chunks from {} sub-queries.", conversationId, nearestChunks.size(), subQueries.size());
             for (int i = 0; i < nearestChunks.size(); i++) {
                 Chunk chunk = nearestChunks.get(i);
                 relevantTextSegments.add(chunk.getContent());

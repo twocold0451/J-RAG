@@ -23,4 +23,13 @@ public interface QAService {
      * @return 包含前 K 个相关片段的列表。
      */
     List<Chunk> hybridSearch(String question, List<UUID> documentIds);
+
+    /**
+     * 批量执行混合搜索。对每个问题并行执行搜索，然后汇总并去重结果。
+     *
+     * @param questions 问题列表。
+     * @param documentIds 用于过滤搜索的可选文档 ID 列表。
+     * @return 汇总后的相关片段列表。
+     */
+    List<Chunk> batchHybridSearch(List<String> questions, List<UUID> documentIds);
 }

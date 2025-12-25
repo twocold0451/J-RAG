@@ -20,6 +20,9 @@
     - **视觉能力**: 集成视觉模型 (Vision LLM)，支持对扫描版 PDF 进行 OCR 识别以及对图表进行语义分析。
 - **🧠 高级 RAG 引擎**:
     - **混合检索 (Hybrid Search)**: 结合 **向量检索** (语义匹配) 与 **关键词检索** (精确匹配)。
+    - **查询增强**:
+        - **上下文重写**: 自动补全对话背景，消除指代不明。
+        - **复杂查询分解**: 将对比、多步推理等复杂问题智能拆解为多个子查询，并行检索以获得更全面的上下文。
     - **结果重排 (Re-ranking)**: 引入 RRF (倒数排名融合) 与 MMR (最大边界相关性) 算法，确保结果的准确性与多样性。
     - **来源溯源**: 每条回答均精准标注原文引用出处，支持点击跳转。
 - **💬 实时交互**:
@@ -111,12 +114,16 @@ graph TD
     
     subgraph "1. 查询优化阶段 (LLM)"
         Rewrite -- 包含上下文/噪声 --> LLM_Rewrite[LLM 重写与智能去噪]
-        Rewrite -- 语义完整 --> Original_Query[保留原始查询]
-        LLM_Rewrite --> Cleaned_Query[优化后的检索词]
-        Original_Query --> Cleaned_Query
+        Rewrite -- 语义完整 --> Decompose_Check{需要分解?}
+        LLM_Rewrite --> Decompose_Check
+        
+        Decompose_Check -- 简单查询 --> Single_Query[单条查询]
+        Decompose_Check -- 复杂/对比 --> Decompose[LLM 查询分解]
+        Decompose --> Sub_Queries[生成多个子查询]
     end
 
-    Cleaned_Query --> Search_Parallel{并行双路检索}
+    Single_Query --> Search_Parallel{并行双路检索}
+    Sub_Queries --> Search_Parallel
 
     subgraph "2. 召回阶段 (Initial Recall)"
         subgraph "向量检索 (Initial Top-K)"
@@ -130,9 +137,10 @@ graph TD
             Jieba --> FTS_DB[(TSVector)]
         end
     end
-
-    MMR --> Decision{开启重排序?}
-    FTS_DB --> Decision
+    
+    MMR --> Merge[结果汇总与去重]
+    FTS_DB --> Merge
+    Merge --> Decision{开启重排序?}
 
     subgraph "3. 融合与精排阶段 (Rerank / Fusion)"
         Decision -- 是 --> Rerank[<b>Cross-Encoder 重排模型</b>]
@@ -154,6 +162,7 @@ J-RAG 采用了一套精密的检索管道 (Retrieval Pipeline)，确保系统�
 1.  **查询重写与智能去噪 (Query Rewrite & Denoise)**
     - **上下文补全**：利用 LLM 分析最近 $N$ 轮对话历史，将用户模糊的提问（如“它的原理是什么？”）改写为独立完整的语义查询。
     - **搜索去噪**：LLM 自动剔除“我想知道”、“麻烦分析一下”等对检索无意义的噪声词，仅保留核心检索关键词，大幅提升全文检索的精确度。
+    - **查询分解 (Query Decomposition)**：对于“对比A和B”或“如何做X以及它的好处”等复杂问题，LLM 将其拆解为多个独立的事实检索子查询（如“A的特征”、“B的特征”），并行执行搜索。这显著提高了对复杂逻辑问题的回答质量，避免单次搜索丢失信息。
 
 2.  **并行双路搜索 (Parallel Dual-Path Search)**
     - **语义向量搜索 (Vector Search)**：将查询转换为高维向量，利用 `pgvector` 计算余弦相似度。这负责捕获“意思相近但词语不同”的相关内容。
@@ -200,6 +209,7 @@ J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 ### 🚀 核心 RAG 优化
 - [x] **重排序 (Re-ranking)**: 引入两阶段检索 (Retrieve -> Rerank)，利用 `bge-reranker` 等模型对 Top-K 结果进行精细排序，大幅提升准确率。
 - [x] **上下文查询重写 (Query Rewriting)**: 利用 LLM 改写用户查询，解决多轮对话中的指代消解和意图模糊问题。
+- [x] **复杂查询分解**: 实现子查询拆解与并行检索，支持对比和多步问题。
 - [ ] **图谱增强 RAG (Graph RAG)**: 构建知识图谱 (Knowledge Graph)，支持多跳推理和复杂实体关系查询。
 
 ### 📄 数据摄取增强

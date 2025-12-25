@@ -235,7 +235,7 @@ public class QAServiceImpl implements QAService {
             List<Chunk> finalResults = new ArrayList<>();
             for (int i = 0; i < candidates.size(); i++) {
                 Chunk candidate = candidates.get(i);
-                double score = (scores != null && i < scores.size()) ? scores.get(i) : 0.0;
+                double score = i < scores.size() ? scores.get(i) : 0.0;
                 candidate.setScore(score); // 假设 Chunk 有 score 字段
                 finalResults.add(candidate);
             }
@@ -272,6 +272,34 @@ public class QAServiceImpl implements QAService {
             log.info("RRF 融合完成，耗时 {} 毫秒。最终得到 {} 个片段。", System.currentTimeMillis() - startTime, finalResults.size());
             return finalResults;
         }
+    }
+
+    @Override
+    public List<Chunk> batchHybridSearch(List<String> questions, List<UUID> documentIds) {
+        if (questions == null || questions.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        log.info("执行批量混合搜索，包含 {} 个子查询", questions.size());
+
+        // 使用 parallelStream 并行执行每个查询的 hybridSearch
+        List<Chunk> allChunks = questions.parallelStream()
+                .map(q -> hybridSearch(q, documentIds))
+                .flatMap(List::stream)
+                .toList();
+
+        // 简单去重：保留首次出现的片段
+        Set<UUID> seenIds = new HashSet<>();
+        List<Chunk> distinctChunks = new ArrayList<>();
+
+        for (Chunk c : allChunks) {
+            if (seenIds.add(c.getId())) {
+                distinctChunks.add(c);
+            }
+        }
+
+        log.info("批量搜索完成。总片段: {}, 去重后: {}", allChunks.size(), distinctChunks.size());
+        return distinctChunks;
     }
 
     // RowMapper to map ResultSet to Chunk object

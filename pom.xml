@@ -15,6 +15,8 @@
     <description>AI Document QA (RAG) Project</description>
     <properties>
         <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <langchain4j.version>1.9.1-beta17</langchain4j.version>
         <langchain4j-open-ai.version>1.9.1</langchain4j-open-ai.version>
         <lombok.version>1.18.30</lombok.version>
@@ -161,6 +163,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
+                    <encoding>UTF-8</encoding>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
