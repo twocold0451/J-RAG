@@ -1,11 +1,8 @@
 package com.example.qarag.config;
 
-import java.util.Stack;
-import java.util.UUID;
+import io.opentelemetry.api.trace.Span;
 
 public class TraceContext {
-    private static final ThreadLocal<String> TRACE_ID = new ThreadLocal<>();
-    private static final ThreadLocal<Stack<String>> SPAN_STACK = ThreadLocal.withInitial(Stack::new);
     private static final ThreadLocal<String> NEXT_GENERATION_NAME = new ThreadLocal<>();
 
     public static void setNextGenerationName(String name) {
@@ -21,30 +18,35 @@ public class TraceContext {
     }
 
     public static void startTrace(String traceId) {
-        TRACE_ID.set(traceId != null ? traceId : UUID.randomUUID().toString());
-        SPAN_STACK.get().clear();
+        // No-op: OpenTelemetry manages trace lifecycle
     }
 
     public static String getTraceId() {
-        return TRACE_ID.get();
+        Span current = Span.current();
+        if (current.getSpanContext().isValid()) {
+            return current.getSpanContext().getTraceId();
+        }
+        return null;
     }
 
     public static void pushSpan(String spanId) {
-        SPAN_STACK.get().push(spanId);
+        // No-op: Managed via standard OTel scopes (try-with-resources)
     }
 
     public static String popSpan() {
-        Stack<String> stack = SPAN_STACK.get();
-        return stack.isEmpty() ? null : stack.pop();
+        // No-op
+        return null;
     }
 
     public static String getCurrentSpanId() {
-        Stack<String> stack = SPAN_STACK.get();
-        return stack.isEmpty() ? null : stack.peek();
+        Span current = Span.current();
+        if (current.getSpanContext().isValid()) {
+            return current.getSpanContext().getSpanId();
+        }
+        return null;
     }
 
     public static void clear() {
-        TRACE_ID.remove();
-        SPAN_STACK.remove();
+        NEXT_GENERATION_NAME.remove();
     }
 }

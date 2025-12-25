@@ -17,6 +17,8 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -52,6 +54,8 @@ public class ConversationService {
     private final QueryDecompositionService queryDecompositionService;
     private final LangFuseService langFuseService;
     private final RagProperties ragProperties;
+    private final io.opentelemetry.api.trace.Tracer tracer;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     private boolean isAdmin(Long userId) {
         return userRepository.findById(userId)
@@ -190,16 +194,18 @@ public class ConversationService {
 
     @Transactional
     public void streamChat(Long conversationId, Long userId, String userMessageContent, SseEmitter emitter) {
-        String traceId = UUID.randomUUID().toString();
-        TraceContext.startTrace(traceId);
-        Instant pipelineStart = Instant.now();
+        Span rootSpan = tracer.spanBuilder("Chat Interaction")
+                .setAttribute("conversationId", conversationId)
+                .setAttribute("userId", userId)
+                .startSpan();
         
-        String rootSpanId = UUID.randomUUID().toString();
-        TraceContext.pushSpan(rootSpanId);
-        
-        langFuseService.createTrace(traceId, "Chat Interaction", userId.toString(), Map.of("conversationId", conversationId));
+        try (Scope scope = rootSpan.makeCurrent()) {
+            String traceId = rootSpan.getSpanContext().getTraceId();
+            String rootSpanId = rootSpan.getSpanContext().getSpanId();
+            Instant pipelineStart = Instant.now();
 
-        try {
+            langFuseService.createTrace(traceId, "Chat Interaction", userId.toString(), Map.of("conversationId", conversationId));
+
             Conversation conversation = conversationRepository.findById(conversationId)
                     .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
@@ -270,35 +276,54 @@ public class ConversationService {
                 
                 // 只要开启了重写功能，就尝试重写（即使是第一句，也可能需要去噪或精简）
                 if (maxRewriteContext > 0) {
-                    String rewriteSpanId = UUID.randomUUID().toString();
-                    TraceContext.pushSpan(rewriteSpanId);
+                    Span rewriteSpan = tracer.spanBuilder("Query Rewrite")
+                            .setAttribute("input", userMessageContent)
+                            .startSpan();
                     Instant rewriteStart = Instant.now();
-                    
-                    List<ChatMessage> historyToPass = chronologicalHistory != null ? chronologicalHistory : new ArrayList<>();
-                    searchKeyword = queryRewriteService.rewriteIfNecessary(userMessageContent, historyToPass);
-                    
-                    TraceContext.popSpan();
-                    langFuseService.createSpan(rewriteSpanId, traceId, rootSpanId, "Query Rewrite", userMessageContent, searchKeyword, rewriteStart, Instant.now());
+                    try (Scope s = rewriteSpan.makeCurrent()) {
+                        List<ChatMessage> historyToPass = chronologicalHistory != null ? chronologicalHistory : new ArrayList<>();
+                        searchKeyword = queryRewriteService.rewriteIfNecessary(userMessageContent, historyToPass);
+                        rewriteSpan.setAttribute("output", searchKeyword);
+                    } catch (Exception e) {
+                        rewriteSpan.recordException(e);
+                        throw e;
+                    } finally {
+                        rewriteSpan.end();
+                    }
+                    langFuseService.createSpan(rewriteSpan.getSpanContext().getSpanId(), traceId, rootSpanId, "Query Rewrite", userMessageContent, searchKeyword, rewriteStart, Instant.now());
                 }
 
-                String decompSpanId = UUID.randomUUID().toString();
-                TraceContext.pushSpan(decompSpanId);
+                Span decompSpan = tracer.spanBuilder("Query Decomposition")
+                        .setAttribute("input", searchKeyword)
+                        .startSpan();
                 Instant decompStart = Instant.now();
+                List<String> subQueries;
+                try (Scope s = decompSpan.makeCurrent()) {
+                    subQueries = queryDecompositionService.decompose(searchKeyword);
+                    decompSpan.setAttribute("output", objectMapper.writeValueAsString(subQueries));
+                } catch (Exception e) {
+                    decompSpan.recordException(e);
+                    throw e;
+                } finally {
+                    decompSpan.end();
+                }
+                langFuseService.createSpan(decompSpan.getSpanContext().getSpanId(), traceId, rootSpanId, "Query Decomposition", searchKeyword, subQueries, decompStart, Instant.now());
 
-                //问题分解
-                List<String> subQueries = queryDecompositionService.decompose(searchKeyword);
-                
-                TraceContext.popSpan();
-                langFuseService.createSpan(decompSpanId, traceId, rootSpanId, "Query Decomposition", searchKeyword, subQueries, decompStart, Instant.now());
-
-                String searchSpanId = UUID.randomUUID().toString();
-                TraceContext.pushSpan(searchSpanId);
+                Span searchSpan = tracer.spanBuilder("Batch Hybrid Search")
+                        .setAttribute("input", objectMapper.writeValueAsString(subQueries))
+                        .startSpan();
                 Instant searchStart = Instant.now();
-                
-                List<Chunk> nearestChunks = qaService.batchHybridSearch(subQueries, associatedDocumentIds);
-                
-                TraceContext.popSpan();
-                langFuseService.createSpan(searchSpanId, traceId, rootSpanId, "Batch Hybrid Search", subQueries, nearestChunks.size() + " chunks", searchStart, Instant.now());
+                List<Chunk> nearestChunks;
+                try (Scope s = searchSpan.makeCurrent()) {
+                    nearestChunks = qaService.batchHybridSearch(subQueries, associatedDocumentIds);
+                    searchSpan.setAttribute("output", "Found " + nearestChunks.size() + " chunks");
+                } catch (Exception e) {
+                    searchSpan.recordException(e);
+                    throw e;
+                } finally {
+                    searchSpan.end();
+                }
+                langFuseService.createSpan(searchSpan.getSpanContext().getSpanId(), traceId, rootSpanId, "Batch Hybrid Search", subQueries, nearestChunks.size() + " chunks", searchStart, Instant.now());
 
                 for (Chunk chunk : nearestChunks) relevantTextSegments.add(chunk.getContent());
             }
@@ -346,12 +371,15 @@ public class ConversationService {
                     emitter.completeWithError(error);
                 }
             });
+            
+            langFuseService.createSpan(rootSpanId, traceId, null, "Total RAG Pipeline", userMessageContent, null, pipelineStart, Instant.now());
+
         } catch (Exception e) {
             log.error("Error in streamChat", e);
+            rootSpan.recordException(e);
             emitter.completeWithError(e);
         } finally {
-            TraceContext.popSpan(); // Pop rootSpanId
-            langFuseService.createSpan(rootSpanId, traceId, null, "Total RAG Pipeline", userMessageContent, null, pipelineStart, Instant.now());
+            rootSpan.end();
             TraceContext.clear();
         }
     }
