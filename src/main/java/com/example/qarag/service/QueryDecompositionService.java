@@ -1,6 +1,6 @@
 package com.example.qarag.service;
 
-import com.example.qarag.config.RagProperties;
+import com.example.qarag.config.TraceContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.model.chat.ChatModel;
@@ -25,27 +25,28 @@ public class QueryDecompositionService {
     private static final Pattern JSON_ARRAY_PATTERN = Pattern.compile("\\[.*?]", Pattern.DOTALL);
 
     private static final String DECOMPOSITION_PROMPT = """
-            You are a query analysis expert. Decompose the user's complex question into simple, independent sub-queries for RAG retrieval.
+            你是一位查询分析专家。请将用户复杂的提问拆解为简单、独立的子查询，以便于在 RAG 系统中进行检索。
             
-            Original Question: %s
+            原始问题: %s
             
-            Rules:
-            1. If the question is simple, return a list containing just the original question.
-            2. Split complex questions (comparisons, multi-part) into independent **fact-retrieval** queries.
-            3. **Do not generate analytical or "why" questions.** Focus on retrieving the underlying data or facts needed to answer.
-            4. **Limit to maximum 3 sub-queries.** Quality over quantity.
-            5. Sub-queries must be complete sentences with explicit entities.
-            6. Output strictly a JSON array of strings.
+            规则：
+            1. 如果问题很简单（单一意图），请直接返回包含原始问题的列表。
+            2. 将复杂问题（如对比分析、多步推理）拆解为独立的**事实检索型**子查询。
+            3. **不要生成分析型或反思型问题（如“为什么”、“怎么看待”）。** 专注于检索回答问题所需的基础事实或数据。
+            4. **限制最多生成 3 个子查询。** 宁缺毋滥，精准第一。
+            5. 子查询必须是包含了明确主语和实体的完整句子（消除指代不明）。
+            6. **必须且仅输出简体中文**，因为知识库是中文的。
+            7. 严格输出一个字符串 JSON 数组，不要包含 Markdown 代码块或其他解释。
             
-            Example 1 (Comparison):
-            Input: What is the difference between Apple and Banana?
-            Output: ["What are the features of Apple", "What are the features of Banana"]
+            示例 1 (对比):
+            输入: 农村和城镇人均消费支出增长区别
+            输出: ["农村人均消费支出的增长情况是什么", "城镇人均消费支出的增长情况是什么"]
             
-            Example 2 (Multi-part):
-            Input: Docker advantages and installation?
-            Output: ["Docker advantages", "Docker installation steps"]
+            示例 2 (多部分):
+            输入: Docker的优势和安装步骤
+            输出: ["Docker的优势", "Docker的安装步骤"]
             
-            JSON Output:
+            JSON 输出:
             """;
 
     public List<String> decompose(String query) {
@@ -59,6 +60,8 @@ public class QueryDecompositionService {
 
         try {
             String prompt = String.format(DECOMPOSITION_PROMPT, query);
+            
+            TraceContext.setNextGenerationName("LLM: Query Decomposition");
             String response = chatModel.chat(prompt).trim();
 
             if (response.startsWith("```")) {

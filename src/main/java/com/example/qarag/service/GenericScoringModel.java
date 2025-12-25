@@ -9,7 +9,9 @@ import dev.langchain4j.model.scoring.ScoringModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.*;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 /**
  * 通用的评分模型实现，支持标准 OpenAI 风格和阿里云百炼风格的重排 API。
@@ -24,7 +26,15 @@ public class GenericScoringModel implements ScoringModel {
 
     public GenericScoringModel(RagProperties.Retrieval.Rerank config) {
         this.config = config;
-        this.restClient = RestClient.builder().build();
+        
+        // 设置 30 秒超时
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
+        requestFactory.setReadTimeout(Duration.ofSeconds(30));
+        
+        this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
+                .build();
+                
         this.objectMapper = new ObjectMapper()
                 .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
@@ -61,6 +71,9 @@ public class GenericScoringModel implements ScoringModel {
                 requestBody.put("texts", docs); // 兼容性：有些 API 使用 texts
             }
 
+            log.info("Sending rerank request to {} for {} documents...", fullUrl, segments.size());
+            long start = System.currentTimeMillis();
+
             String responseBody = restClient.post()
                     .uri(fullUrl)
                     .header("Authorization", (config.apiKey() != null && !config.apiKey().isBlank()) 
@@ -68,6 +81,8 @@ public class GenericScoringModel implements ScoringModel {
                     .body(requestBody)
                     .retrieve()
                     .body(String.class);
+            
+            log.info("Rerank API responded in {} ms", System.currentTimeMillis() - start);
 
             List<Double> scores = parseScores(responseBody, segments.size());
             return Response.from(scores);

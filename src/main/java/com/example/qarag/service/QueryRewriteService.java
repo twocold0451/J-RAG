@@ -1,6 +1,7 @@
 package com.example.qarag.service;
 
 import com.example.qarag.config.RagProperties;
+import com.example.qarag.config.TraceContext;
 import com.example.qarag.domain.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import lombok.RequiredArgsConstructor;
@@ -74,6 +75,8 @@ public class QueryRewriteService {
                         .collect(Collectors.joining("\n"));
 
             String prompt = String.format(REWRITE_PROMPT, historyContext, query);
+            
+            TraceContext.setNextGenerationName("LLM: Query Rewrite");
             String processedQuery = chatModel.chat(prompt).trim();
 
             // 去掉可能的引号（LLM 有时会加上）

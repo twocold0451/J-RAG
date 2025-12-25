@@ -10,7 +10,14 @@ import org.springframework.validation.annotation.Validated;
 public record RagProperties(
                 Retrieval retrieval,
                 Chunking chunking,
-                Vision vision) {
+                Vision vision,
+                LangFuse langfuse) {
+
+        public record LangFuse(
+                boolean enabled,
+                String baseUrl,
+                String publicKey,
+                String secretKey) {}
 
         public record Retrieval(
                         @Min(1) @Max(50) int topK,
