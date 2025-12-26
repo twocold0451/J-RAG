@@ -217,8 +217,7 @@ public class ExcelChunker implements DocumentChunker {
         }
 
         for (Shape shape : drawing) {
-            if (shape instanceof Picture) {
-                Picture picture = (Picture) shape;
+            if (shape instanceof Picture picture) {
                 PictureData pictureData = picture.getPictureData();
                 if (pictureData == null) continue;
                 
@@ -236,7 +235,7 @@ public class ExcelChunker implements DocumentChunker {
                     descriptions.computeIfAbsent(row, k -> new ArrayList<>()).add(description);
                     
                 } catch (Exception e) {
-                    log.warn("处理工作表 '{}' 第 {} 行的图片失败: {}", 
+                    log.error("处理工作表 '{}' 第 {} 行的图片失败: {}", 
                             sheet.getSheetName(), row, e.getMessage());
                 }
             }

@@ -1,5 +1,6 @@
 package com.example.qarag.service;
 
+import com.example.qarag.api.config.Observed;
 import com.example.qarag.config.RagProperties;
 import com.example.qarag.config.TraceContext;
 import com.example.qarag.domain.ChatMessage;
@@ -55,6 +56,7 @@ public class QueryRewriteService {
     /**
      * 根据上下文智能重写查询，并进行搜索去噪优化
      */
+    @Observed(name = "Query Rewrite")
     public String rewriteIfNecessary(String query, List<ChatMessage> history) {
         if (ragProperties.retrieval().rewrite() == null || !ragProperties.retrieval().rewrite().enabled()) {
             return query;

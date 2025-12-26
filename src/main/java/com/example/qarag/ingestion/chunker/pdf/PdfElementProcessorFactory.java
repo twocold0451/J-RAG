@@ -51,7 +51,7 @@ public class PdfElementProcessorFactory {
         List<PdfElementProcessor> applicableProcessors = getProcessorsForPage(document, pageNumber);
 
         if (applicableProcessors.isEmpty()) {
-            log.warn("未找到第 {} 页的处理器", pageNumber);
+            log.error("未找到第 {} 页的处理器", pageNumber);
             return List.of();
         }
 

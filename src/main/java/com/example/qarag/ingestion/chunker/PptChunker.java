@@ -108,7 +108,7 @@ public class PptChunker implements DocumentChunker {
                                     slideContent.append("\n> **[图片分析]** ").append(desc).append("\n");
                                 }
                             } catch (Exception e) {
-                                log.warn("分析 PPT 幻灯片 {} 中的图片失败: {}", slideNumber, e.getMessage());
+                                log.error("分析 PPT 幻灯片 {} 中的图片失败: {}", slideNumber, e.getMessage());
                             }
                         }
                     }

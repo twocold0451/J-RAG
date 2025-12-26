@@ -67,7 +67,7 @@ public class IngestionServiceImpl implements IngestionService {
                 }
                 log.info("IngestionService: 已加载 {} 个停用词。", stopWords.size());
             } else {
-                log.warn("IngestionService: 未找到 stopwords.txt。");
+                log.error("IngestionService: 未找到 stopwords.txt。");
             }
         } catch (Exception e) {
             log.error("IngestionService: Failed to load stop words", e);
@@ -90,7 +90,7 @@ public class IngestionServiceImpl implements IngestionService {
             List<TextSegment> rawSegments = chunker.chunk(tempFilePath);
 
             if (rawSegments.isEmpty()) {
-                log.warn("文档 {} 未找到任何文本片段", documentId);
+                log.error("文档 {} 未找到任何文本片段", documentId);
                 documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.FAILED, 0,
                         "未提取到内容");
                 messagingTemplate.convertAndSendToUser(
@@ -107,7 +107,7 @@ public class IngestionServiceImpl implements IngestionService {
                     .toList();
             
             if (segments.isEmpty()) {
-                 log.warn("清洗后文档 {} 的所有片段均被过滤掉", documentId);
+                 log.error("清洗后文档 {} 的所有片段均被过滤掉", documentId);
                  documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.FAILED, 0,
                          "清洗后没有剩余内容");
                  // ... 处理错误
@@ -142,7 +142,7 @@ public class IngestionServiceImpl implements IngestionService {
                 try {
                     metadataJson = objectMapper.writeValueAsString(segment.metadata().toMap());
                 } catch (Exception e) {
-                    log.warn("无法为文档 {} 序列化元数据", documentId, e);
+                    log.error("无法为文档 {} 序列化元数据", documentId, e);
                 }
 
                 String insertSql = """

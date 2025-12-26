@@ -1,41 +1,44 @@
 package com.example.qarag.qa;
 
+import com.example.qarag.api.config.Observed;
 import com.example.qarag.api.dto.QaResponse;
 import com.example.qarag.config.RagProperties;
+import com.example.qarag.config.TraceContext;
 import com.example.qarag.domain.Chunk;
 import com.example.qarag.service.LangFuseService;
 import com.example.qarag.utils.MmrUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.huaban.analysis.jieba.JiebaSegmenter;
 import com.huaban.analysis.jieba.SegToken;
 import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.context.Context;
-import io.opentelemetry.context.Scope;
+import dev.langchain4j.model.output.Response;
+import dev.langchain4j.model.scoring.ScoringModel;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import jakarta.annotation.PostConstruct;
-import org.springframework.core.io.ClassPathResource;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
-
-import dev.langchain4j.model.scoring.ScoringModel;
-import dev.langchain4j.model.output.Response;
 
 @Slf4j
 @Service
@@ -49,10 +52,19 @@ public class QAServiceImpl implements QAService {
     private final Executor searchExecutor;
     private final ScoringModel scoringModel;
     private final LangFuseService langFuseService;
-    private final io.opentelemetry.api.trace.Tracer tracer;
-    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    {
+        new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+    }
+
     private final JiebaSegmenter jiebaSegmenter = new JiebaSegmenter();
     private final Set<String> stopWords = new HashSet<>();
+
+    @Lazy
+    @Autowired
+    private QAService self;
 
     @PostConstruct
     public void loadStopWords() {
@@ -69,7 +81,7 @@ public class QAServiceImpl implements QAService {
                 }
                 log.info("已加载 {} 个停用词。", stopWords.size());
             } else {
-                log.warn("资源中未找到 stopwords.txt。");
+                log.error("资源中未找到 stopwords.txt。");
             }
         } catch (Exception e) {
             log.error("加载停用词失败", e);
@@ -110,20 +122,15 @@ public class QAServiceImpl implements QAService {
      * Executes hybrid search: Vector Search + Keyword Search -> (RRF Fusion OR Reranking)
      */
     @Override
+    @Observed(name = "Hybrid Search", includeOutFields = {"id", "content", "score", "documentId"}, collectionLimit = 10)
     public List<Chunk> hybridSearch(String question, List<UUID> documentIds) {
-        // Capture parent span ID before starting new span
-        Span parentSpan = Span.current();
-        String parentSpanId = parentSpan.getSpanContext().isValid() ? parentSpan.getSpanContext().getSpanId() : null;
+        // Capture context for async threads (propagated via TraceContext or captured here)
+        // Since we are using @Observed, the Aspect has already pushed a new Span ID onto TraceContext.
+        // We capture it here to pass to async threads.
+        String traceId = TraceContext.getTraceId();
+        String parentSpanId = TraceContext.getCurrentSpanId();
 
-        Span hybridSpan = tracer.spanBuilder("Hybrid Search")
-                .setAttribute("question", question)
-                .startSpan();
-
-        try (Scope scope = hybridSpan.makeCurrent()) {
-            String traceId = hybridSpan.getSpanContext().getTraceId();
-            String currentSpanId = hybridSpan.getSpanContext().getSpanId();
-            Instant startTime = Instant.now();
-
+        try {
             boolean rerankEnabled = ragProperties.retrieval().rerank() != null && ragProperties.retrieval().rerank().enabled();
             int topK = ragProperties.retrieval().topK();
 
@@ -142,114 +149,93 @@ public class QAServiceImpl implements QAService {
                     .map(uuid -> "'" + uuid.toString() + "'")
                     .collect(Collectors.joining(", "));
 
-            // Wrap the context for async execution
-            Context otelContext = Context.current();
-
             // 1. Prepare Vector Search Task
             CompletableFuture<List<Chunk>> vectorSearchFuture = CompletableFuture.supplyAsync(() -> {
-                try (io.opentelemetry.context.Scope taskScope = otelContext.makeCurrent()) {
-                    io.opentelemetry.api.trace.Span vSpan = tracer.spanBuilder("Vector Search")
-                            .setAttribute("input", question)
-                            .startSpan();
-                    Instant vStart = Instant.now();
-                    try (io.opentelemetry.context.Scope vScope = vSpan.makeCurrent()) {
-                        long vectorSearchStart = System.currentTimeMillis();
-                        TextSegment questionSegment = TextSegment.from(question);
-                        float[] queryEmbedding = embeddingModel.embedAll(List.of(questionSegment)).content().getFirst().vector();
-                        String vectorSql = "SELECT id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
-                                "FROM chunks " +
-                                "WHERE document_id IN (" + documentIdsClause + ") " +
-                                "ORDER BY content_vector <=> ? " +
-                                "LIMIT ?";
-                        // MMR Parameters
-                        int fetchK = searchK * 3; // Fetch more candidates for diversity re-ranking
-                        double mmrLambda = 0.5;   // Balance between relevance and diversity
-                        List<Chunk> initialResults = jdbcClient.sql(vectorSql)
-                                .params(new PGvector(queryEmbedding), fetchK)
-                                .query(new ChunkRowMapper())
-                                .list();
-                        log.info("向量搜索在 {} 毫秒内获取了 {} 个候选片段", System.currentTimeMillis() - vectorSearchStart, initialResults.size());
+                try {
+                    long vectorSearchStart = System.currentTimeMillis();
+                    TextSegment questionSegment = TextSegment.from(question);
+                    float[] queryEmbedding = embeddingModel.embedAll(List.of(questionSegment)).content().getFirst().vector();
+                    String vectorSql = "SELECT id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
+                            "FROM chunks " +
+                            "WHERE document_id IN (" + documentIdsClause + ") " +
+                            "ORDER BY content_vector <=> ? " +
+                            "LIMIT ?";
+                    // MMR Parameters
+                    int fetchK = searchK * 3; // Fetch more candidates for diversity re-ranking
+                    double mmrLambda = 0.5;   // Balance between relevance and diversity
+                    List<Chunk> initialResults = jdbcClient.sql(vectorSql)
+                            .params(new PGvector(queryEmbedding), fetchK)
+                            .query(new ChunkRowMapper())
+                            .list();
+                    log.info("向量搜索在 {} 毫秒内获取了 {} 个候选片段", System.currentTimeMillis() - vectorSearchStart, initialResults.size());
 
-                        // 应用 MMR 重新排序
-                        List<Chunk> finalResults = MmrUtils.applyMmr(initialResults, queryEmbedding, searchK, mmrLambda);
+                    // 应用 MMR 重新排序
+                    List<Chunk> finalResults = MmrUtils.applyMmr(initialResults, queryEmbedding, searchK, mmrLambda);
 
-                        // Serialize output for Langfuse
-                        vSpan.setAttribute("output", objectMapper.writeValueAsString(finalResults.stream().map(Chunk::getContent).limit(5).toList()));
-                        langFuseService.createSpan(null, traceId, currentSpanId, "Vector Search", null,
-                                finalResults.stream().limit(10).collect(Collectors.toMap(
-                                        chunk -> chunk.getId().toString(),
-                                        c -> StringUtils.left(c.getContent(), 20)
-                                )),
-                                vStart, Instant.now());
-                        // Clear vectors to save memory
-                        finalResults.forEach(c -> c.setContentVector(null));
-                        return finalResults;
-                    } catch (Exception e) {
-                        vSpan.recordException(e);
-                        throw new RuntimeException(e);
-                    } finally {
-                        vSpan.end();
-                    }
+                    // Manually log internal span for async task using captured IDs
+                    langFuseService.createSpan(null, traceId, parentSpanId, "Vector Search", null,
+                            finalResults.stream().limit(10).collect(Collectors.toMap(
+                                    chunk -> chunk.getId().toString(),
+                                    c -> StringUtils.left(c.getContent(), 20)
+                            )),
+                            Instant.now(), Instant.now());
+                    
+                    // Clear vectors to save memory
+                    finalResults.forEach(c -> c.setContentVector(null));
+                    return finalResults;
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
             }, searchExecutor);
+
             // 2. Prepare Keyword Search Task
             CompletableFuture<List<Chunk>> keywordSearchFuture = CompletableFuture.supplyAsync(() -> {
-                try (io.opentelemetry.context.Scope taskScope = otelContext.makeCurrent()) {
-                    io.opentelemetry.api.trace.Span kSpan = tracer.spanBuilder("Keyword Search")
-                            .setAttribute("input", question)
-                            .startSpan();
-                    Instant kStart = Instant.now();
-                    try (io.opentelemetry.context.Scope kScope = kSpan.makeCurrent()) {
-                        long keywordSearchStart = System.currentTimeMillis();
-                        List<SegToken> tokens = jiebaSegmenter.process(question, JiebaSegmenter.SegMode.SEARCH);
+                try {
+                    long keywordSearchStart = System.currentTimeMillis();
+                    List<SegToken> tokens = jiebaSegmenter.process(question, JiebaSegmenter.SegMode.SEARCH);
 
-                        // Filter stop words
-                        String segmentedQuery = tokens.stream()
-                                .map(i -> i.word)
-                                .filter(word -> !stopWords.contains(word))
-                                .collect(Collectors.joining(" "));
-                        if (segmentedQuery.isBlank()) {
-                            segmentedQuery = tokens.stream().map(i -> i.word).collect(Collectors.joining(" "));
-                        }
-
-                        // 构建全文检索的 tsquery：将分词结果去重并转换为 | (或) 逻辑
-                        String tsQuery = Arrays.stream(segmentedQuery.split("\\s+"))
-                                .filter(s -> !s.isBlank())
-                                .distinct()
-                                .collect(Collectors.joining(" | "));
-                        if (tsQuery.isBlank()) {
-                            tsQuery = question;
-                        }
-                        kSpan.setAttribute("db.statement", "to_tsquery('simple', '" + tsQuery + "')");
-                        log.info("关键字搜索分词查询：'{}' -> tsquery: '{}'", segmentedQuery, tsQuery);
-                        String keywordSql = "SELECT id, document_id, content, NULL as content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
-                                "FROM chunks " +
-                                "WHERE document_id IN (" + documentIdsClause + ") " +
-                                "AND content_search @@ to_tsquery('simple', ?) " +
-                                "ORDER BY ts_rank(content_search, to_tsquery('simple', ?)) DESC " +
-                                "LIMIT ?";
-                        List<Chunk> results = jdbcClient.sql(keywordSql)
-                                .params(tsQuery, tsQuery, searchK)
-                                .query(new ChunkRowMapper())
-                                .list();
-                        log.info("关键字搜索在 {} 毫秒内找到了 {} 个结果", System.currentTimeMillis() - keywordSearchStart, results.size());
-                        kSpan.setAttribute("output", objectMapper.writeValueAsString(results.stream().map(Chunk::getContent).limit(5).toList()));
-
-                        langFuseService.createSpan(null, traceId, currentSpanId, "Keyword Search",
-                                Map.of("tsQuery", tsQuery),
-                                results.stream().limit(10).collect(Collectors.toMap(
-                                        chunk -> chunk.getId().toString(),
-                                        c -> StringUtils.left(c.getContent(), 20)
-                                )),
-                                kStart, Instant.now());
-
-                        return results;
-                    } catch (Exception e) {
-                        kSpan.recordException(e);
-                        throw new RuntimeException(e);
-                    } finally {
-                        kSpan.end();
+                    // Filter stop words
+                    String segmentedQuery = tokens.stream()
+                            .map(i -> i.word)
+                            .filter(word -> !stopWords.contains(word))
+                            .collect(Collectors.joining(" "));
+                    if (segmentedQuery.isBlank()) {
+                        segmentedQuery = tokens.stream().map(i -> i.word).collect(Collectors.joining(" "));
                     }
+
+                    // 构建全文检索的 tsquery：将分词结果去重并转换为 | (或) 逻辑
+                    String tsQuery = Arrays.stream(segmentedQuery.split("\\s+"))
+                            .filter(s -> !s.isBlank())
+                            .distinct()
+                            .collect(Collectors.joining(" | "));
+                    if (tsQuery.isBlank()) {
+                        tsQuery = question;
+                    }
+                    log.info("关键字搜索分词查询：'{}' -> tsquery: '{}'", segmentedQuery, tsQuery);
+                    String keywordSql = "SELECT id, document_id, content, NULL as content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
+                            "FROM chunks " +
+                            "WHERE document_id IN (" + documentIdsClause + ") " +
+                            "AND content_search @@ to_tsquery('simple', ?) " +
+                            "ORDER BY ts_rank(content_search, to_tsquery('simple', ?)) DESC " +
+                            "LIMIT ?";
+                    List<Chunk> results = jdbcClient.sql(keywordSql)
+                            .params(tsQuery, tsQuery, searchK)
+                            .query(new ChunkRowMapper())
+                            .list();
+                    log.info("关键字搜索在 {} 毫秒内找到了 {} 个结果", System.currentTimeMillis() - keywordSearchStart, results.size());
+
+                    // Manually log internal span for async task using captured IDs
+                    langFuseService.createSpan(null, traceId, parentSpanId, "Keyword Search",
+                            Map.of("tsQuery", tsQuery),
+                            results.stream().limit(10).collect(Collectors.toMap(
+                                    chunk -> chunk.getId().toString(),
+                                    c -> StringUtils.left(c.getContent(), 20)
+                            )),
+                            Instant.now(), Instant.now());
+
+                    return results;
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
             }, searchExecutor);
 
@@ -261,48 +247,32 @@ public class QAServiceImpl implements QAService {
             // 4. 选择融合策略：重排序 或 RRF
             List<Chunk> finalResults;
             if (rerankEnabled && scoringModel != null) {
-                io.opentelemetry.api.trace.Span rerankSpan = tracer.spanBuilder("Reranking").startSpan();
-                Instant rerankStartTime = Instant.now();
-                try (io.opentelemetry.context.Scope s = rerankSpan.makeCurrent()) {
-                    // 合并并去重
-                    Map<UUID, Chunk> combinedMap = new LinkedHashMap<>();
-                    vectorResults.forEach(c -> combinedMap.put(c.getId(), c));
-                    keywordResults.forEach(c -> combinedMap.put(c.getId(), c));
-                    List<Chunk> candidates = new ArrayList<>(combinedMap.values());
-                    rerankSpan.setAttribute("input", "Candidates: " + candidates.size());
-                    log.info("重排序模式：合并后共有 {} 个候选片段", candidates.size());
-                    // 使用 LangChain4j 标准接口进行评分
-                    List<TextSegment> segments = candidates.stream()
-                            .map(c -> TextSegment.from(c.getContent()))
-                            .collect(Collectors.toList());
-                    Response<List<Double>> scoresResponse = scoringModel.scoreAll(segments, question);
-                    List<Double> scores = scoresResponse.content();
+                // Reranking logic
+                Map<UUID, Chunk> combinedMap = new LinkedHashMap<>();
+                vectorResults.forEach(c -> combinedMap.put(c.getId(), c));
+                keywordResults.forEach(c -> combinedMap.put(c.getId(), c));
+                List<Chunk> candidates = new ArrayList<>(combinedMap.values());
+                
+                log.info("重排序模式：合并后共有 {} 个候选片段", candidates.size());
+                // 使用 LangChain4j 标准接口进行评分
+                List<TextSegment> segments = candidates.stream()
+                        .map(c -> TextSegment.from(c.getContent()))
+                        .collect(Collectors.toList());
+                Response<List<Double>> scoresResponse = scoringModel.scoreAll(segments, question);
+                List<Double> scores = scoresResponse.content();
 
-                    // 将分数关联回 Chunk 并排序
-                    finalResults = new ArrayList<>();
-                    for (int i = 0; i < candidates.size(); i++) {
-                        Chunk candidate = candidates.get(i);
-                        double score = i < scores.size() ? scores.get(i) : 0.0;
-                        candidate.setScore(score);
-                        finalResults.add(candidate);
-                    }
-
-                    finalResults.sort(Comparator.comparingDouble(Chunk::getScore).reversed());
-                    finalResults = finalResults.stream().limit(topK).collect(Collectors.toList());
-                    rerankSpan.setAttribute("output", "Selected top " + finalResults.size());
-                    langFuseService.createSpan(null, traceId, currentSpanId, "Reranking",
-                            candidates.stream().limit(10).collect(Collectors.toMap(
-                                    Chunk::getId,
-                                    c -> StringUtils.left(c.getContent(), 20)
-                            )),
-                            finalResults.stream().limit(10).collect(Collectors.toMap(
-                                    Chunk::getId,
-                                    c -> StringUtils.left(c.getContent(), 20)
-                            )),
-                            rerankStartTime, Instant.now());
-                } finally {
-                    rerankSpan.end();
+                // 将分数关联回 Chunk 并排序
+                finalResults = new ArrayList<>();
+                for (int i = 0; i < candidates.size(); i++) {
+                    Chunk candidate = candidates.get(i);
+                    double score = i < scores.size() ? scores.get(i) : 0.0;
+                    candidate.setScore(score);
+                    finalResults.add(candidate);
                 }
+
+                finalResults.sort(Comparator.comparingDouble(Chunk::getScore).reversed());
+                finalResults = finalResults.stream().limit(topK).collect(Collectors.toList());
+                
                 log.info("重排序完成。最终返回 {} 个片段。", finalResults.size());
             } else {
                 // RRF 融合
@@ -331,24 +301,16 @@ public class QAServiceImpl implements QAService {
                 log.info("RRF 融合完成。最终得到 {} 个片段。", finalResults.size());
             }
 
-            langFuseService.createSpan(currentSpanId, traceId, parentSpanId, "Hybrid Search", question,
-                    finalResults.stream().limit(10).collect(Collectors.toMap(
-                            chunk -> chunk.getId().toString(),
-                            c -> StringUtils.left(c.getContent(), 20)
-                    )), startTime, Instant.now());
-
             return finalResults;
 
         } catch (Exception e) {
-            hybridSpan.recordException(e);
             log.error("执行混合搜索时出错", e);
             throw new RuntimeException("混合搜索失败", e);
-        } finally {
-            hybridSpan.end();
         }
     }
 
     @Override
+    @Observed(name = "Batch Hybrid Search",includeInputFields = {"questions"},includeOutFields = {"id","content"},collectionLimit = 10)
     public List<Chunk> batchHybridSearch(List<String> questions, List<UUID> documentIds) {
         if (questions == null || questions.isEmpty()) {
             return Collections.emptyList();
@@ -356,9 +318,8 @@ public class QAServiceImpl implements QAService {
 
         log.info("执行批量混合搜索，包含 {} 个子查询", questions.size());
 
-        // 使用 stream 顺序执行每个查询的 hybridSearch，确保 TraceContext 正确传递
         List<Chunk> allChunks = questions.stream()
-                .map(q -> hybridSearch(q, documentIds))
+                .map(q -> self.hybridSearch(q, documentIds))
                 .flatMap(List::stream)
                 .toList();
 

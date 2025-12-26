@@ -1,6 +1,7 @@
 package com.example.qarag.config;
 
 import com.example.qarag.service.LangFuseService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.listener.ChatModelErrorContext;
 import dev.langchain4j.model.chat.listener.ChatModelListener;
@@ -23,6 +24,7 @@ import java.util.stream.Collectors;
 public class LangFuseChatModelListener implements ChatModelListener {
 
     private final LangFuseService langFuseService;
+    private final ObjectMapper objectMapper; // Use the primary ObjectMapper (or create a new one if needed)
     
     // Attributes keys
     public static final String LANGFUSE_TRACE_ID = "langfuse_trace_id";
@@ -40,26 +42,29 @@ public class LangFuseChatModelListener implements ChatModelListener {
             // 使用小写的 role 名称，符合多数 LLM API 习惯
             String role = msg.type().toString().toLowerCase();
             map.put("role", role);
-            
-            if (msg instanceof UserMessage um) {
-                String text = um.contents().stream()
-                    .filter(c -> c instanceof TextContent)
-                    .map(c -> ((TextContent) c).text())
-                    .collect(Collectors.joining("\n"));
-                map.put("content", text);
-            } else if (msg instanceof AiMessage am) {
-                map.put("content", am.text());
-                if (am.toolExecutionRequests() != null && !am.toolExecutionRequests().isEmpty()) {
-                     map.put("tool_calls", am.toolExecutionRequests());
+
+            switch (msg) {
+                case UserMessage um -> {
+                    String text = um.contents().stream()
+                            .filter(c -> c instanceof TextContent)
+                            .map(c -> ((TextContent) c).text())
+                            .collect(Collectors.joining("\n"));
+                    map.put("content", text);
                 }
-            } else if (msg instanceof SystemMessage sm) {
-                map.put("content", sm.text());
-            } else if (msg instanceof ToolExecutionResultMessage tm) {
-                map.put("tool_call_id", tm.id());
-                map.put("content", tm.text());
-            } else {
-                // 回退方案：如果类型未知，尝试通过 toString 获取内容
-                map.put("content", msg.toString());
+                case AiMessage am -> {
+                    map.put("content", am.text());
+                    if (am.toolExecutionRequests() != null && !am.toolExecutionRequests().isEmpty()) {
+                        map.put("tool_calls", am.toolExecutionRequests());
+                    }
+                }
+                case SystemMessage sm -> map.put("content", sm.text());
+                case ToolExecutionResultMessage tm -> {
+                    map.put("tool_call_id", tm.id());
+                    map.put("content", tm.text());
+                }
+                default ->
+                    // 回退方案：如果类型未知，尝试通过 toString 获取内容
+                        map.put("content", msg.toString());
             }
             return map;
         }).collect(Collectors.toList());
@@ -112,14 +117,25 @@ public class LangFuseChatModelListener implements ChatModelListener {
             usage.put("total", responseContext.chatResponse().tokenUsage().totalTokenCount());
         }
 
+        Object extractedInput = extractMessages(responseContext.chatRequest().messages());
+        String extractedOutput = responseContext.chatResponse().aiMessage().text();
+
+        try {
+            log.debug("LangFuseListener onResponse: Input={}, Output={}", 
+                objectMapper.writeValueAsString(extractedInput), 
+                extractedOutput);
+        } catch (Exception e) {
+            log.warn("Failed to log extracted messages", e);
+        }
+
         langFuseService.createGeneration(
                 UUID.randomUUID().toString(),
                 traceId,
                 parentId,
                 name,
                 responseContext.chatResponse().modelName(),
-                extractMessages(responseContext.chatRequest().messages()), // 关键修复：手动序列化输入消息
-                responseContext.chatResponse().aiMessage().text(),         // 关键修复：直接取字符串作为输出
+                extractedInput, // 关键修复：手动序列化输入消息
+                extractedOutput, // 关键修复：直接取字符串作为输出
                 usage,
                 startTime,
                 endTime

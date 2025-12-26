@@ -1,5 +1,6 @@
 package com.example.qarag.service;
 
+import com.example.qarag.api.config.Observed;
 import com.example.qarag.config.TraceContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -49,6 +50,7 @@ public class QueryDecompositionService {
             JSON 输出:
             """;
 
+    @Observed(name = "Query Decomposition")
     public List<String> decompose(String query) {
         if (query == null || query.isBlank()) {
             return Collections.emptyList();
@@ -76,13 +78,13 @@ public class QueryDecompositionService {
             try {
                 List<String> subQueries = objectMapper.readValue(response, new TypeReference<>() {});
                 if (subQueries == null || subQueries.isEmpty()) {
-                    log.warn("Empty decomposition result, fallback to original.");
+                    log.error("Empty decomposition result, fallback to original.");
                     return List.of(query);
                 }
                 log.info("Decomposed: '{}' -> {}", query, subQueries);
                 return subQueries;
             } catch (Exception e) {
-                log.warn("Failed to parse JSON: {}, fallback to original.", response);
+                log.error("Failed to parse JSON: {}, fallback to original.", response);
                 return List.of(query);
             }
 

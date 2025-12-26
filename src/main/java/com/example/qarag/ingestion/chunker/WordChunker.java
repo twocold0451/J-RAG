@@ -156,7 +156,7 @@ public class WordChunker implements DocumentChunker {
                         descriptions.add(desc);
                     }
                 } catch (Exception e) {
-                    log.warn("分析 Word 文档中的图片失败: {}", e.getMessage());
+                    log.error("分析 Word 文档中的图片失败: {}", e.getMessage());
                 }
             }
         }
@@ -201,7 +201,7 @@ public class WordChunker implements DocumentChunker {
             currentPath.add(title);
         } else {
             while (currentPath.size() >= level) {
-                currentPath.remove(currentPath.size() - 1);
+                currentPath.removeLast();
             }
             currentPath.add(title);
         }

@@ -1,10 +1,11 @@
 # J-RAG: Java 企业级检索增强生成引擎
 
-![Java](https://img.shields.io/badge/Java-21%2B-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.x-6DB33F?style=for-the-badge&logo=spring&logoColor=white)
-![LangChain4j](https://img.shields.io/badge/LangChain4j-Integration-blue?style=for-the-badge)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
-![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge)
+![Java](https://img.shields.io/badge/Java-21+-ED8B00?style=flat&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.x-6DB33F?style=flat&logo=spring&logoColor=white)
+![LangChain4j](https://img.shields.io/badge/LangChain4j-1.10.0-blue?style=flat)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat&logo=postgresql&logoColor=white)
+![LangFuse](https://img.shields.io/badge/LangFuse-Observability-black?style=flat&logo=target&logoColor=white)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat)
 
 **J-RAG** 是一个基于 **Spring Boot** 和 **LangChain4j** 构建的稳健全栈 RAG 系统。它将您的私有数据与大语言模型 (LLM) 连接起来，提供精准且具备上下文感知能力的智能问答。
 
@@ -25,6 +26,9 @@
         - **复杂查询分解**: 将对比、多步推理等复杂问题智能拆解为多个子查询，并行检索以获得更全面的上下文。
     - **结果重排 (Re-ranking)**: 引入 RRF (倒数排名融合) 与 MMR (最大边界相关性) 算法，确保结果的准确性与多样性。
     - **来源溯源**: 每条回答均精准标注原文引用出处，支持点击跳转。
+- **📊 全链路可观测性**:
+    - **LangFuse 集成**: 自动追踪 RAG 链路的每一步（Query Rewrite, Retrieval, LLM Generation）。
+    - **精细化控制**: 提供自定义注解 `@Observed`，支持字段过滤、参数脱敏和集合截断，避免敏感数据泄露和日志爆炸。
 - **💬 实时交互**:
     - 基于 **WebSocket** 的实时流式对话体验。
     - 完整的会话历史管理。
@@ -70,11 +74,17 @@
 | | `CHAT_MODEL_NAME` | 模型名称 (如 `qwen-max`, `gpt-4o`)。 |
 | **Embedding (向量)** | `EMBEDDING_MODEL_API_KEY` | **必填**。向量模型的 API Key。 |
 | | `EMBEDDING_MODEL_BASE_URL` | 向量模型 Base URL。 |
+| **Rerank (重排)** | `RERANK_API_KEY` | 重排序模型 API Key。 |
+| | `RERANK_BASE_URL` | 重排序模型 Base URL (如 DashScope, SiliconFlow)。 |
+| | `RERANK_MODEL_NAME` | 模型名称 (如 `qwen3-rerank`, `bge-reranker-v2-m3`)。 |
 | **Vision (视觉)** | `VISION_API_KEY` | 选填。用于 OCR 和图片理解。 |
 | | `VISION_BASE_URL` | 视觉模型 Base URL。 |
 | **数据库** | `DB_URL` | JDBC 连接地址 (如 `jdbc:postgresql://localhost:5432/qarag`)。 |
 | | `DB_USERNAME` | 数据库用户名。 |
 | | `DB_PASSWORD` | 数据库密码。 |
+| **可观测性** | `LANGFUSE_PUBLIC_KEY` | LangFuse Public Key (pk-...)。 |
+| | `LANGFUSE_SECRET_KEY` | LangFuse Secret Key (sk-...)。 |
+| | `LANGFUSE_BASE_URL` | LangFuse API 地址 (默认 https://cloud.langfuse.com)。 |
 | **安全** | `JWT_SECRET` | **必填**。生成 Token 的密钥 (建议 32 位以上随机字符串)。 |
 
 #### RAG 参数调优
@@ -218,7 +228,7 @@ J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 - [x] **网页抓取**: 支持直接输入 URL 抓取网页，并自动转换为 Markdown 以保留结构信息。
 
 ### 🛠️ 系统功能
-- [ ] **全链路可观测性 (Observability)**: 集成追踪工具监控链路延迟、Token 消耗及检索质量。
+- [x] **全链路可观测性 (Observability)**: 集成 LangFuse 追踪链路延迟、Token 消耗及检索质量。
 - [ ] **管理仪表板**: 可视化向量库状态，支持人工修正切分块，查看聊天日志。
 
 ---

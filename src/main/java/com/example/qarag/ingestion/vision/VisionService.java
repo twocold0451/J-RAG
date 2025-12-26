@@ -49,7 +49,7 @@ public class VisionService {
      */
     public String analyzeImage(BufferedImage image, String prompt) {
         if (!isEnabled()) {
-            log.warn("视觉服务未启用或未配置");
+            log.error("视觉服务未启用或未配置");
             return "[视觉模型未启用]";
         }
 
@@ -152,11 +152,11 @@ public class VisionService {
             // Response structure: { "candidates": [ { "content": { "parts": [ { "text": "..." } ] } } ] }
             List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
             if (candidates != null && !candidates.isEmpty()) {
-                Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
+                Map<String, Object> content = (Map<String, Object>) candidates.getFirst().get("content");
                 if (content != null) {
                     List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
                     if (parts != null && !parts.isEmpty()) {
-                        return (String) parts.get(0).get("text");
+                        return (String) parts.getFirst().get("text");
                     }
                 }
             }
@@ -231,7 +231,7 @@ public class VisionService {
         try {
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
             if (choices != null && !choices.isEmpty()) {
-                Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                Map<String, Object> message = (Map<String, Object>) choices.getFirst().get("message");
                 if (message != null) {
                     return (String) message.get("content");
                 }

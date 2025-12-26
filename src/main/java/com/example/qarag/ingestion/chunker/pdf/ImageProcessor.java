@@ -98,14 +98,14 @@ public class ImageProcessor implements PdfElementProcessor {
             long duration = System.currentTimeMillis() - start;
             
             if (duration > 5000) {
-                 log.warn("第 {} 页的视觉分析耗时 {} 毫秒 ( > 5秒 )", pageNumber, duration);
+                 log.error("第 {} 页的视觉分析耗时 {} 毫秒 ( > 5秒 )", pageNumber, duration);
             } else {
                  log.info("第 {} 页的视觉分析耗时 {} 毫秒", pageNumber, duration);
             }
 
             if (analysisResult == null || analysisResult.isBlank()
                     || analysisResult.contains("未启用") || analysisResult.contains("失败")) {
-                log.warn("Vision API 为第 {} 页返回了空值或错误", pageNumber);
+                log.error("Vision API 为第 {} 页返回了空值或错误", pageNumber);
                 return PdfElementResult.empty(PdfElementType.IMAGE, pageNumber);
             }
             

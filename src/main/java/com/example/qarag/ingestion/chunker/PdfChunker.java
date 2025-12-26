@@ -49,7 +49,7 @@ public class PdfChunker implements DocumentChunker {
                 log.info("PDF 已加密: {}", filePath.getFileName());
                 AccessPermission ap = pdfDoc.getCurrentAccessPermission();
                 if (!ap.canExtractContent()) {
-                    log.warn("没有提取权限，无法处理加密的 PDF: {}", filePath.getFileName());
+                    log.error("没有提取权限，无法处理加密的 PDF: {}", filePath.getFileName());
                     throw new IOException("PDF 已加密且禁用了内容提取");
                 }
             }
