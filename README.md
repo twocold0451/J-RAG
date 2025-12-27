@@ -75,8 +75,8 @@
 | **Embedding (向量)** | `EMBEDDING_MODEL_API_KEY` | **必填**。向量模型的 API Key。 |
 | | `EMBEDDING_MODEL_BASE_URL` | 向量模型 Base URL。 |
 | **Rerank (重排)** | `RERANK_API_KEY` | 重排序模型 API Key。 |
-| | `RERANK_BASE_URL` | 重排序模型 Base URL (如 DashScope, SiliconFlow)。 |
-| | `RERANK_MODEL_NAME` | 模型名称 (如 `qwen3-rerank`, `bge-reranker-v2-m3`)。 |
+| | `RERANK_BASE_URL` | 重排序模型 Base URL (如 DashScope, SiliconFlow, Jina AI)。 |
+| | `RERANK_MODEL_NAME` | 模型名称 (如 `qwen3-rerank`, `bge-reranker-v2-m3`, `jina-reranker-v2-base-multilingual`)。 |
 | **Vision (视觉)** | `VISION_API_KEY` | 选填。用于 OCR 和图片理解。 |
 | | `VISION_BASE_URL` | 视觉模型 Base URL。 |
 | **数据库** | `DB_URL` | JDBC 连接地址 (如 `jdbc:postgresql://localhost:5432/qarag`)。 |

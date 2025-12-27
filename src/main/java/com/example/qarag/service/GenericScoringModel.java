@@ -55,7 +55,8 @@ public class GenericScoringModel implements ScoringModel {
             }
 
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", config.modelName() != null ? config.modelName() : (isAliCloud ? "gte-rerank" : "bge-reranker-v2-m3"));
+            String defaultModel = isAliCloud ? "gte-rerank" : (fullUrl.contains("jina.ai") ? "jina-reranker-v2-base-multilingual" : "bge-reranker-v2-m3");
+            requestBody.put("model", config.modelName() != null ? config.modelName() : defaultModel);
 
             if (isAliCloud) {
                 // 阿里云百炼格式：{"model": "...", "input": {"query": "...", "documents": [...]}}
@@ -64,11 +65,19 @@ public class GenericScoringModel implements ScoringModel {
                 input.put("documents", segments.stream().map(TextSegment::text).toList());
                 requestBody.put("input", input);
             } else {
-                // 标准格式 (TEI/SiliconFlow)
+                // 标准格式
                 requestBody.put("query", query);
                 List<String> docs = segments.stream().map(TextSegment::text).toList();
                 requestBody.put("documents", docs);
-                requestBody.put("texts", docs); // 兼容性：有些 API 使用 texts
+                
+                // Jina 不建议传 texts 字段，且为了避免混淆，仅在非 Jina 时为了兼容性保留 texts
+                if (!fullUrl.contains("jina.ai")) {
+                    requestBody.put("texts", docs); // 兼容性：有些旧 API 使用 texts
+                }
+
+                if (fullUrl.contains("jina.ai")) {
+                    requestBody.put("top_n", segments.size());
+                }
             }
 
             log.info("Sending rerank request to {} for {} documents...", fullUrl, segments.size());
