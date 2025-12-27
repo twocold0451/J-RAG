@@ -217,15 +217,20 @@ J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 ## 📅 路线图 (Roadmap)
 
 ### 🚀 核心 RAG 优化
-- [x] **重排序 (Re-ranking)**: 引入两阶段检索 (Retrieve -> Rerank)，利用 `bge-reranker` 等模型对 Top-K 结果进行精细排序，大幅提升准确率。
+- [x] **重排序 (Re-ranking)**: 引入两阶段检索 (Retrieve -> Rerank)，适配 **Jina Reranker**、BGE 等模型，大幅提升 Top-K 检索准确率。
 - [x] **上下文查询重写 (Query Rewriting)**: 利用 LLM 改写用户查询，解决多轮对话中的指代消解和意图模糊问题。
 - [x] **复杂查询分解**: 实现子查询拆解与并行检索，支持对比和多步问题。
 - [ ] **图谱增强 RAG (Graph RAG)**: 构建知识图谱 (Knowledge Graph)，支持多跳推理和复杂实体关系查询。
 
 ### 📄 数据摄取增强
-- [x] **PPT 解析**: 实现 `PptChunker` 支持 `.pptx` 幻灯片内容、备注提取及图片分析。
 - [ ] **跨页表格处理**: 优化 PDF 解析，智能合并跨页表格。
-- [x] **网页抓取**: 支持直接输入 URL 抓取网页，并自动转换为 Markdown 以保留结构信息。
+- [ ] **文本清洗与噪音过滤**: 优化解析逻辑，自动过滤多余空格、重复换行及无效符号，提升数据纯净度。
+
+### 🧠 Jina AI 深度优化
+- [ ] **全栈集成**: 统一接入 **Jina Reader** (抓取)、**Embeddings v3** (向量化) 和 **Reranker** (重排)。
+- [ ] **Late Chunking**: 实现服务端后期分块技术，使分块向量具备全局上下文感知能力。
+- [ ] **统一嵌入工厂**: 实现 Embedding Provider 总开关，支持根据任务意图 (Ingestion/Query) 自动切换 Jina 的 `task` 参数，确保向量空间一致性。
+- [ ] **长上下文策略**: 调整 Chunk Size (800-1200 Token) 以充分利用 Jina v3 的长窗口优势。
 
 ### 🛠️ 系统功能
 - [x] **全链路可观测性 (Observability)**: 集成 LangFuse 追踪链路延迟、Token 消耗及检索质量。
