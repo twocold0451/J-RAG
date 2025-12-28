@@ -5,33 +5,52 @@ import com.example.qarag.api.dto.QaRequest;
 import com.example.qarag.api.dto.QaResponse;
 import com.example.qarag.api.dto.UploadResponse;
 import com.example.qarag.config.CurrentUser;
+import com.example.qarag.domain.Chunk;
 import com.example.qarag.domain.Document;
 import com.example.qarag.ingestion.IngestionService;
-import com.example.qarag.qa.QAService;
+import com.example.qarag.qa.DeepThinkingAgent;
 import com.example.qarag.service.DocumentService;
+import com.example.qarag.service.RetrievalService;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatModel;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // Add this import
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.file.Files; // Add this import
-import java.nio.file.Path; // Add this import
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map; // Add this import
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@Slf4j // 添加该注解
+@Slf4j
 public class RAGController {
 
     private final IngestionService ingestionService;
-    private final QAService qaService;
+    private final RetrievalService retrievalService;
     private final DocumentService documentService;
     private final com.example.qarag.ingestion.crawler.WebCrawlerService webCrawlerService;
+    private final ChatModel chatModel;
+    private final DeepThinkingAgent deepThinkingAgent;
+
+    private static final String PROMPT_TEMPLATE = """
+            你是一个知识库助手。根据以下文档片段回答用户的问题。不要编造答案。如果无法从片段中找到明确答案，请说“未找到明确答案”。
+
+            用户问题：%s
+
+            文档片段：
+            %s
+
+            请基于上面片段回答，并在答案末尾列出每个引用段落对应的来源标识（例如：文件名:页:chunkIndex）。
+            """;
 
     @PostMapping("/ingest-url")
     public ResponseEntity<UploadResponse> ingestUrl(
@@ -123,11 +142,34 @@ public class RAGController {
     @PostMapping("/query")
     public ResponseEntity<QaResponse> query(@RequestBody QaRequest req) {
         try {
-            QaResponse resp = qaService.answer(req.question());
-            return ResponseEntity.ok(resp);
+            List<Chunk> relevantChunks = retrievalService.hybridSearch(req.question(), Collections.emptyList());
+            String chunksContext = relevantChunks.isEmpty() ? 
+                "" : relevantChunks.stream()
+                    .map(Chunk::getContent)
+                    .collect(Collectors.joining("\n---\n"));
+
+            String prompt = String.format(PROMPT_TEMPLATE, req.question(), chunksContext);
+            String answer = chatModel.chat(prompt);
+
+            return ResponseEntity.ok(new QaResponse(answer, relevantChunks));
         } catch (Exception e) {
-            // 在实际应用中应正确记录异常日志
-            e.printStackTrace();
+            log.error("Query failed", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/deep-query")
+    public ResponseEntity<QaResponse> deepQuery(@RequestBody QaRequest req) {
+        try {
+            log.info("Received deep query request: {}", req.question());
+            // 独立查询端点，手动构造单条消息列表
+            List<dev.langchain4j.data.message.ChatMessage> messages = new ArrayList<>();
+            messages.add(UserMessage.from(req.question()));
+            
+            String answer = deepThinkingAgent.chat(messages);
+            return ResponseEntity.ok(new QaResponse(answer, Collections.emptyList()));
+        } catch (Exception e) {
+            log.error("Deep query failed", e);
             return ResponseEntity.internalServerError().build();
         }
     }

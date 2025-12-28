@@ -1,6 +1,7 @@
 package com.example.qarag.service;
 
 import com.example.qarag.config.RagProperties;
+import com.example.qarag.api.config.Observed;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.segment.TextSegment;
@@ -40,6 +41,7 @@ public class GenericScoringModel implements ScoringModel {
     }
 
     @Override
+    @Observed(name = "Reranking")
     public Response<List<Double>> scoreAll(List<TextSegment> segments, String query) {
         if (segments == null || segments.isEmpty()) {
             return Response.from(Collections.emptyList());

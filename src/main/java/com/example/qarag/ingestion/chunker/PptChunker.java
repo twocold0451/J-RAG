@@ -1,6 +1,7 @@
 package com.example.qarag.ingestion.chunker;
 
 import com.example.qarag.config.RagProperties;
+import com.example.qarag.ingestion.utils.TextCleaner;
 import com.example.qarag.ingestion.vision.VisionService;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
@@ -120,6 +121,8 @@ public class PptChunker implements DocumentChunker {
                         .put("slide_number", slideNumber);
 
                 String content = slideContent.toString().trim();
+                // 文本清洗
+                content = TextCleaner.clean(content);
                 if (!content.isEmpty()) {
                     if (content.length() <= ragProperties.chunking().size()) {
                         segments.add(TextSegment.from(content, metadata));

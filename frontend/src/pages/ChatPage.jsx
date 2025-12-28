@@ -35,6 +35,7 @@ function ChatPage() {
   const [inputMessage, setInputMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [isDeepThinkingEnabled, setIsDeepThinkingEnabled] = useState(false);
   const messagesEndRef = useRef(null);
 
     // Document Modal state
@@ -201,7 +202,7 @@ function ChatPage() {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ message: currentMsg }),
+          body: JSON.stringify({ message: currentMsg, useDeepThinking: isDeepThinkingEnabled }),
           signal: ctrl.signal,
           openWhenHidden: true, // 防止切换标签页时断连重试
           async onopen(response) {
@@ -526,7 +527,21 @@ function ChatPage() {
 
             {/* Input Area */}
             <div className="bg-base-100 p-4 border-t shrink-0">
-            <div className="max-w-3xl mx-auto flex gap-2">
+            <div className="max-w-3xl mx-auto flex flex-col gap-2">
+                <div className="flex items-center justify-end px-1">
+                   <div className="form-control" title="启用 Agent 深度思考模式，支持复杂推理和多次搜索（响应较慢）">
+                      <label className="label cursor-pointer gap-2 p-0">
+                        <span className={`label-text text-xs font-bold ${isDeepThinkingEnabled ? 'text-primary' : 'text-gray-400'}`}>深度思考 (ReAct)</span> 
+                        <input 
+                            type="checkbox" 
+                            className="toggle toggle-xs toggle-primary" 
+                            checked={isDeepThinkingEnabled} 
+                            onChange={(e) => setIsDeepThinkingEnabled(e.target.checked)} 
+                        />
+                      </label>
+                   </div>
+                </div>
+                <div className="flex gap-2">
                 <textarea
                 className="textarea textarea-bordered w-full resize-none focus:outline-primary"
                 placeholder={selectedConversation ? "输入你的问题..." : "请先选择一个会话"}
@@ -544,6 +559,7 @@ function ChatPage() {
                 >
                 发送
                 </button>
+                </div>
             </div>
             </div>
         </div>

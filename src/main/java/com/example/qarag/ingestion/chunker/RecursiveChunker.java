@@ -1,6 +1,7 @@
 package com.example.qarag.ingestion.chunker;
 
 import com.example.qarag.config.RagProperties;
+import com.example.qarag.ingestion.utils.TextCleaner;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
@@ -47,7 +48,10 @@ public class RecursiveChunker implements DocumentChunker {
             if (encoding == null)
                 encoding = "UTF-8";
 
-            document = Document.from(new String(bytes, Charset.forName(encoding)));
+            String rawText = new String(bytes, Charset.forName(encoding));
+            // 文本清洗
+            rawText = TextCleaner.clean(rawText);
+            document = Document.from(rawText);
         } catch (IOException e) {
             log.error("读取文件失败: {}", filePath, e);
             throw new RuntimeException("读取文件失败", e);

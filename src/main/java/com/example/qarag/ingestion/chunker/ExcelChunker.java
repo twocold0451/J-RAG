@@ -1,6 +1,7 @@
 package com.example.qarag.ingestion.chunker;
 
 import com.example.qarag.config.RagProperties;
+import com.example.qarag.ingestion.utils.TextCleaner;
 import com.example.qarag.ingestion.vision.VisionService;
 import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.segment.TextSegment;
@@ -180,7 +181,7 @@ public class ExcelChunker implements DocumentChunker {
         }
         
         if (hasTrailingImages) {
-             if (currentChunk.length() + trailingImagesSb.length() <= maxChunkSize && currentChunk.length() > 0) {
+             if (currentChunk.length() + trailingImagesSb.length() <= maxChunkSize && !currentChunk.isEmpty()) {
                  // 尝试追加到最后一个 chunk (如果还没保存的话... 实际上上面的逻辑已经保存了或还在 currentChunk 中)
                  // 如果 currentChunk 已经在上面被保存了（通过 length check），这里 currentChunk 又是新的 header。
                  // 这里的逻辑稍微有点复杂，为了简单，直接作为新 segment 或追加。
@@ -194,7 +195,9 @@ public class ExcelChunker implements DocumentChunker {
     }
 
     private TextSegment createSegment(String text, String sheetName, String sourceName) {
-         return TextSegment.from(
+        // 文本清洗
+        text = TextCleaner.cleanExcelOutput(text);
+        return TextSegment.from(
                 text,
                 Metadata.from("source", sourceName)
                         .put("type", "excel")

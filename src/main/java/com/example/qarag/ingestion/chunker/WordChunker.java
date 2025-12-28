@@ -1,6 +1,7 @@
 package com.example.qarag.ingestion.chunker;
 
 import com.example.qarag.config.RagProperties;
+import com.example.qarag.ingestion.utils.TextCleaner;
 import com.example.qarag.ingestion.vision.VisionService;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
@@ -207,13 +208,16 @@ public class WordChunker implements DocumentChunker {
         }
     }
 
-    private void createSegmentsFromSection(List<TextSegment> segments, 
-                                           String content, 
-                                           List<String> headerPath, 
+    private void createSegmentsFromSection(List<TextSegment> segments,
+                                           String content,
+                                           List<String> headerPath,
                                            Path filePath,
                                            DocumentSplitter splitter) {
         String contentStr = content.trim();
         if (contentStr.isEmpty()) return;
+
+        // 文本清洗
+        contentStr = TextCleaner.cleanWordArtifacts(contentStr);
 
         String pathString = String.join(" > ", headerPath);
         Metadata metadata = Metadata.from("source", filePath.getFileName().toString())

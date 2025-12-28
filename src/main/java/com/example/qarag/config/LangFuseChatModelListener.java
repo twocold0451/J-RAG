@@ -54,7 +54,17 @@ public class LangFuseChatModelListener implements ChatModelListener {
                 case AiMessage am -> {
                     map.put("content", am.text());
                     if (am.toolExecutionRequests() != null && !am.toolExecutionRequests().isEmpty()) {
-                        map.put("tool_calls", am.toolExecutionRequests());
+                        List<Map<String, Object>> toolCalls = am.toolExecutionRequests().stream().map(req -> {
+                            Map<String, Object> toolCall = new HashMap<>();
+                            toolCall.put("name", req.name());
+                            toolCall.put("id", req.id());
+                            // 将 arguments 转为 JSON 字符串避免序列化问题
+                            if (req.arguments() != null) {
+                                toolCall.put("arguments", req.arguments());
+                            }
+                            return toolCall;
+                        }).collect(Collectors.toList());
+                        map.put("tool_calls", toolCalls);
                     }
                 }
                 case SystemMessage sm -> map.put("content", sm.text());

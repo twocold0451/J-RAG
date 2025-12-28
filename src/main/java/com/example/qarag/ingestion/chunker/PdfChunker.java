@@ -3,6 +3,7 @@ package com.example.qarag.ingestion.chunker;
 import com.example.qarag.config.RagProperties;
 import com.example.qarag.ingestion.chunker.pdf.PdfElementProcessorFactory;
 import com.example.qarag.ingestion.chunker.pdf.PdfElementResult;
+import com.example.qarag.ingestion.utils.TextCleaner;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.Metadata;
@@ -70,6 +71,9 @@ public class PdfChunker implements DocumentChunker {
                         .filter(r -> r.success() && r.content() != null && !r.content().isBlank())
                         .map(PdfElementResult::content)
                         .collect(Collectors.joining("\n\n"));
+
+                // 文本清洗
+                pageContent = TextCleaner.clean(pageContent);
 
                 if (pageContent.isBlank()) {
                     log.debug("Page {} has no extractable content, skipping", pageNum);
