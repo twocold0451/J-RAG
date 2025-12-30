@@ -67,7 +67,14 @@ public class QueryDecompositionService {
             String response = chatModel.chat(prompt).trim();
 
             if (response.startsWith("```")) {
-                response = response.replaceAll("(?s)^```(json)?|```$", "").trim();
+                response = response.substring(3);
+                if (response.toLowerCase().startsWith("json")) {
+                    response = response.substring(4);
+                }
+                response = response.trim();
+                if (response.endsWith("```")) {
+                    response = response.substring(0, response.length() - 3).trim();
+                }
             }
 
             Matcher matcher = JSON_ARRAY_PATTERN.matcher(response);
@@ -76,6 +83,7 @@ public class QueryDecompositionService {
             }
 
             try {
+                log.debug("Processed response before parsing: {}", response);
                 List<String> subQueries = objectMapper.readValue(response, new TypeReference<>() {});
                 if (subQueries == null || subQueries.isEmpty()) {
                     log.error("Empty decomposition result, fallback to original.");

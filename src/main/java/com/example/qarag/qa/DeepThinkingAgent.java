@@ -1,5 +1,6 @@
 package com.example.qarag.qa;
 
+import com.example.qarag.api.config.Observed;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.service.SystemMessage;
 
@@ -7,6 +8,7 @@ import java.util.List;
 
 public interface DeepThinkingAgent {
 
+    @Observed(name = "Deep Thinking Agent")
     @SystemMessage("""
             你是一个具备深度思考能力的 RAG 智能助手。你的目标是利用可用工具准确回答用户的问题。
             

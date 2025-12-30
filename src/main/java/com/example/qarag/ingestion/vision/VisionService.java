@@ -134,11 +134,23 @@ public class VisionService {
                     Map<String, Object> bodyMap = objectMapper.readValue(response.getBody(), Map.class);
                     return extractContentFromGoogleResponse(bodyMap);
                 } catch (Exception e) {
-                    log.error("解析 Google Gemini API 的 JSON 响应失败。原始响应：{}", response.getBody());
+                    // 不输出完整响应体以防敏感信息泄露，只记录响应大小
+                    int responseLength = response.getBody() != null ? response.getBody().length() : 0;
+                    log.error("解析 Google Gemini API 的 JSON 响应失败。响应大小：{} 字符", responseLength);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Gemini API 响应详情（已脱敏）：{}", 
+                                com.example.qarag.utils.LogMaskingUtils.mask(response.getBody(), 200));
+                    }
                     throw new RuntimeException("Google Gemini API 返回了无效的 JSON", e);
                 }
             } else {
-                log.error("Google Gemini API 返回了非成功状态：{}。正文：{}", response.getStatusCode(), response.getBody());
+                // 不输出完整响应体以防敏感信息泄露，只记录状态和响应大小
+                int responseLength = response.getBody() != null ? response.getBody().length() : 0;
+                log.error("Google Gemini API 返回了非成功状态：{}。响应大小：{} 字符", response.getStatusCode(), responseLength);
+                if (log.isDebugEnabled() && response.getBody() != null) {
+                    log.debug("Gemini API 错误响应详情（已脱敏）：{}", 
+                            com.example.qarag.utils.LogMaskingUtils.mask(response.getBody(), 200));
+                }
                 return "[视觉模型 请求失败]";
             }
         } catch (Exception e) {
@@ -210,11 +222,23 @@ public class VisionService {
                     Map<String, Object> bodyMap = objectMapper.readValue(response.getBody(), Map.class);
                     return extractContentFromResponse(bodyMap);
                 } catch (Exception e) {
-                    log.error("解析来自视觉 API 的 JSON 响应失败。原始响应：{}", response.getBody());
+                    // 不输出完整响应体以防敏感信息泄露，只记录响应大小
+                    int responseLength = response.getBody() != null ? response.getBody().length() : 0;
+                    log.error("解析 来自视觉 API 的 JSON 响应失败。响应大小：{} 字符", responseLength);
+                    if (log.isDebugEnabled()) {
+                        log.debug("视觉 API 响应详情（已脱敏）：{}", 
+                                com.example.qarag.utils.LogMaskingUtils.mask(response.getBody(), 200));
+                    }
                     throw new RuntimeException("视觉 API 返回了无效的 JSON", e);
                 }
             } else {
-                log.error("视觉 API 返回了非成功状态：{}。正文：{}", response.getStatusCode(), response.getBody());
+                // 不输出完整响应体以防敏感信息泄露，只记录状态和响应大小
+                int responseLength = response.getBody() != null ? response.getBody().length() : 0;
+                log.error("视觉 API 返回了非成功状态：{}。响应大小：{} 字符", response.getStatusCode(), responseLength);
+                if (log.isDebugEnabled() && response.getBody() != null) {
+                    log.debug("视觉 API 错误响应详情（已脱敏）：{}", 
+                            com.example.qarag.utils.LogMaskingUtils.mask(response.getBody(), 200));
+                }
                 return "[视觉模型 请求失败]";
             }
         } catch (Exception e) {

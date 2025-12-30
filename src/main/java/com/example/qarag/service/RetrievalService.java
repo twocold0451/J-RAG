@@ -97,11 +97,14 @@ public class RetrievalService {
 
             int searchK = rerankEnabled ? ragProperties.retrieval().rerank().initialTopK() : topK;
 
-            log.info("开始混合搜索问题：'{}'，模式：{}，涉及 {} 个文档，searchK：{}",
-                    question, (rerankEnabled ? "重排序" : "RRF 融合"), documentIds.size(), searchK);
+            if (log.isDebugEnabled()) {
+                log.debug("开始混合搜索问题：'{}'，模式：{}，涉及 {} 个文档，searchK：{}",
+                        com.example.qarag.utils.LogMaskingUtils.maskQuery(question), 
+                        (rerankEnabled ? "重排序" : "RRF 融合"), documentIds.size(), searchK);
+            }
 
             if (documentIds.isEmpty()) {
-                log.info("混合搜索未提供文档 ID，由于未给定特定上下文，返回空列表。");
+                log.info("混合搜索未提供文档 ID，返回空列表。");
                 return Collections.emptyList();
             }
 
@@ -128,7 +131,7 @@ public class RetrievalService {
                             .params(new PGvector(queryEmbedding), fetchK)
                             .query(new ChunkRowMapper())
                             .list();
-                    log.info("向量搜索在 {} 毫秒内获取了 {} 个候选片段", System.currentTimeMillis() - vectorSearchStart, initialResults.size());
+                    log.debug("向量搜索在 {} 毫秒内获取了 {} 个候选片段", System.currentTimeMillis() - vectorSearchStart, initialResults.size());
 
                     List<Chunk> finalResults = MmrUtils.applyMmr(initialResults, queryEmbedding, searchK, mmrLambda);
                     finalResults.forEach(c -> c.setContentVector(null));
@@ -168,7 +171,8 @@ public class RetrievalService {
                     if (tsQuery.isBlank()) {
                         tsQuery = question;
                     }
-                    log.info("关键字搜索分词查询：'{}' -> tsquery: '{}'", segmentedQuery, tsQuery);
+                    log.debug("关键字搜索分词查询：'{}' -> tsquery: '{}'", 
+                            com.example.qarag.utils.LogMaskingUtils.maskQuery(segmentedQuery), tsQuery);
                     String keywordSql = "SELECT id, document_id, content, NULL as content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
                             "FROM chunks " +
                             "WHERE document_id IN (" + documentIdsClause + ") " +
@@ -179,7 +183,7 @@ public class RetrievalService {
                             .params(tsQuery, tsQuery, searchK)
                             .query(new ChunkRowMapper())
                             .list();
-                    log.info("关键字搜索在 {} 毫秒内找到了 {} 个结果", System.currentTimeMillis() - keywordSearchStart, results.size());
+                    log.debug("关键字搜索在 {} 毫秒内找到了 {} 个结果", System.currentTimeMillis() - keywordSearchStart, results.size());
 
                     langFuseService.createSpan(null, traceId, parentSpanId, "Keyword Search",
                             Map.of("tsQuery", tsQuery),
@@ -206,7 +210,7 @@ public class RetrievalService {
                 keywordResults.forEach(c -> combinedMap.put(c.getId(), c));
                 List<Chunk> candidates = new ArrayList<>(combinedMap.values());
                 
-                log.info("重排序模式：合并后共有 {} 个候选片段", candidates.size());
+                log.debug("重排序模式：合并后共有 {} 个候选片段", candidates.size());
                 List<TextSegment> segments = candidates.stream()
                         .map(c -> TextSegment.from(c.getContent()))
                         .collect(Collectors.toList());
@@ -224,7 +228,7 @@ public class RetrievalService {
                 finalResults.sort(Comparator.comparingDouble(Chunk::getScore).reversed());
                 finalResults = finalResults.stream().limit(topK).collect(Collectors.toList());
                 
-                log.info("重排序完成。最终返回 {} 个片段。", finalResults.size());
+                log.debug("重排序完成。最终返回 {} 个片段。", finalResults.size());
             } else {
                 int rrfK = 60;
                 Map<UUID, Double> rrfScores = new HashMap<>();
@@ -248,7 +252,7 @@ public class RetrievalService {
                         .map(entry -> chunkMap.get(entry.getKey()))
                         .collect(Collectors.toList());
 
-                log.info("RRF 融合完成。最终得到 {} 个片段。", finalResults.size());
+                log.debug("RRF 融合完成。最终得到 {} 个片段。", finalResults.size());
             }
 
             return finalResults;

@@ -85,9 +85,16 @@ public class QueryRewriteService {
             processedQuery = processedQuery.replaceAll("^[\"']|[\"']$", "");
 
             if (processedQuery.equalsIgnoreCase(query)) {
-                log.debug("LLM 决定查询 '{}' 不需要改动", query);
+                log.debug("查询不需要改动，长度: {} 字符", query.length());
             } else {
-                log.info("查询已优化：'{}' -> '{}'", query, processedQuery);
+                // 只记录查询长度变化，不输出实际内容以保护用户隐私
+                log.info("查询已优化：长度 {} -> {} 字符", query.length(), processedQuery.length());
+                if (log.isDebugEnabled()) {
+                    // 只在DEBUG级别输出部分查询内容用于调试
+                    log.debug("查询详情（已脱敏）: '{}' -> '{}'", 
+                            com.example.qarag.utils.LogMaskingUtils.maskQuery(query), 
+                            com.example.qarag.utils.LogMaskingUtils.maskQuery(processedQuery));
+                }
             }
             return processedQuery.isEmpty() ? query : processedQuery;
         } catch (Exception e) {

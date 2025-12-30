@@ -149,15 +149,18 @@ public class IngestionServiceImpl implements IngestionService {
                         INSERT INTO chunks(id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at)
                         VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?)
                         """;
-                log.info("入库 INSERT SQL: {}", insertSql);
-                log.info("入库 INSERT 参数: docId={}, content='{}', embedding_vector=<...>, index={}, metadata='{}', chunker={}, keywords='{}', createdAt={}",
-                        documentId,
-                        segment.text().replaceAll("\\u0000", "").substring(0, Math.min(segment.text().length(), 100)) + (segment.text().length() > 100 ? "..." : ""),
-                        i,
-                        metadataJson,
-                        chunker.getClass().getSimpleName(),
-                        contentKeywords,
-                        OffsetDateTime.now());
+
+                // 只在DEBUG级别记录SQL语句，避免生产环境输出
+                if (log.isDebugEnabled()) {
+                    log.debug("入库 INSERT SQL: {}", insertSql);
+                }
+
+                // 记录处理进度，避免输出敏感的文档内容
+                if (i % 100 == 0 || i == segments.size() - 1) {
+                    int progress = (i + 1) * 100 / segments.size();
+                    log.info("文档 {} 入库进度: {}/{} ({}%), 当前块长度: {} 字符",
+                            documentId, i + 1, segments.size(), progress, segment.text().length());
+                }
 
                 jdbcClient.sql(insertSql)
                         .params(
