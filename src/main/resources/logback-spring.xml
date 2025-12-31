@@ -44,7 +44,7 @@
 
     <!-- 开发环境配置 -->
     <springProfile name="dev">
-        <logger name="com.example.qarag" level="DEBUG"/>
+        <logger name="com.twocold.jrag" level="DEBUG"/>
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
@@ -52,7 +52,7 @@
 
     <!-- 生产环境配置 -->
     <springProfile name="prod">
-        <logger name="com.example.qarag" level="INFO"/>
+        <logger name="com.twocold.jrag" level="INFO"/>
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="FILE"/>
