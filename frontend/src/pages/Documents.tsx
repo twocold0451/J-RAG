@@ -111,10 +111,7 @@ export default function Documents() {
     setIsUploading(true)
     try {
       for (const file of selectedFiles) {
-        const result = await api.uploadDocument(file, uploadCategory, false)
-        if (result.id) {
-          setUploadingDocId(result.id)
-        }
+        await api.uploadDocument(file, uploadCategory, false)
       }
       // 延迟关闭对话框，让用户看到进度
       setTimeout(() => {
@@ -135,10 +132,7 @@ export default function Documents() {
 
     setIsUrlLoading(true)
     try {
-      const result = await api.ingestUrl({ url: urlInput, isPublic: false, category: urlCategory })
-      if (result.id) {
-        setUploadingDocId(result.id)
-      }
+      await api.ingestUrl({ url: urlInput, isPublic: false, category: urlCategory })
       setTimeout(() => {
         setIsUploadOpen(false)
         setUrlInput('')
@@ -296,11 +290,11 @@ export default function Documents() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-1 rounded-full text-xs ${categoryColors[doc.category] || 'bg-muted text-muted-foreground'}`}>
+                    <span className={`px-2.5 py-1 rounded-full text-xs ${categoryColors[doc.category || ''] || 'bg-muted text-muted-foreground'}`}>
                       {doc.category}
                     </span>
-                    <span className={`px-2.5 py-1 rounded-full text-xs ${statusMap[doc.status]?.color || 'bg-muted text-muted-foreground'}`}>
-                      {statusMap[doc.status]?.label || doc.status}
+                    <span className={`px-2.5 py-1 rounded-full text-xs ${statusMap[doc.status || '']?.color || 'bg-muted text-muted-foreground'}`}>
+                      {statusMap[doc.status || '']?.label || doc.status}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">

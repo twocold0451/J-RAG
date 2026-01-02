@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Send, Plus, MessageSquare, Trash2, Bot, User, LayoutTemplate, FileText } from 'lucide-react'
+import { Send, Plus, MessageSquare, Trash2, Bot, User, FileText } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { Button } from '@/components/ui/button'
@@ -51,7 +50,6 @@ interface Conversation extends ConversationResponse {
 }
 
 export default function Chat() {
-  const navigate = useNavigate()
   const { showToast } = useToast()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
@@ -63,7 +61,6 @@ export default function Chat() {
   const [newChatTitle, setNewChatTitle] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [isDeepThinking, setIsDeepThinking] = useState(false)
-  const [documents, setDocuments] = useState<{ id: string; filename: string }[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Delete Confirmation State
@@ -74,7 +71,6 @@ export default function Chat() {
   useEffect(() => {
     loadConversations()
     loadTemplates()
-    loadDocuments()
   }, [])
 
   const loadConversations = async () => {
@@ -96,15 +92,6 @@ export default function Chat() {
       setTemplates(data)
     } catch (err) {
       console.error('Failed to load templates:', err)
-    }
-  }
-
-  const loadDocuments = async () => {
-    try {
-      const docs = await api.getDocuments()
-      setDocuments(docs.map(d => ({ id: d.id, filename: d.name })))
-    } catch (err) {
-      console.error('Failed to load documents:', err)
     }
   }
 
@@ -181,9 +168,7 @@ export default function Chat() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        openTimeout: 60000, // 连接超时 60 秒
-        maxBodyLength: 10 * 1024 * 1024, // 最大响应 10MB
-        retryOnError: false, // 禁用自动重试
+        retryOnError: false,
         body: JSON.stringify({
           message: inputMessage,
           useDeepThinking: isDeepThinking

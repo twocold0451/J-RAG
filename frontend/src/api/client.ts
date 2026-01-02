@@ -19,7 +19,7 @@ const API_BASE = (import.meta.env?.VITE_API_BASE_URL as string) || '/api'
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
-  body?: Record<string, unknown>
+  body?: Record<string, unknown> | unknown
   params?: Record<string, string | number | undefined>
   headers?: Record<string, string>
 }
