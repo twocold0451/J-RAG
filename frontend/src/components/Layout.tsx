@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Users,
   Users2,
-  Settings,
   LogOut,
   Menu,
   MessageSquareDashed,

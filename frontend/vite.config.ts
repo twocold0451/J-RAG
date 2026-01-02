@@ -12,6 +12,12 @@ export default defineConfig({
   define: {
     global: 'window',
   },
+  optimizeDeps: {
+    exclude: ['stompjs'],
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+  },
   server: {
     proxy: {
       '/api': {

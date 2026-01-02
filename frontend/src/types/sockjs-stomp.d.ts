@@ -1,15 +1,3 @@
-/// <reference types="vite/client" />
-
-interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL: string
-  readonly VITE_APP_NAME: string
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv
-}
-
-// sockjs-client type declaration
 declare module 'sockjs-client' {
   export default class SockJS extends EventTarget {
     constructor(url: string, options?: Record<string, unknown>)
@@ -17,7 +5,6 @@ declare module 'sockjs-client' {
   }
 }
 
-// stompjs type declaration
 declare module 'stompjs' {
   export default class Stomp {
     static over(socket: any): Stomp

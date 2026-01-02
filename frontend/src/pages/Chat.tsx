@@ -168,7 +168,6 @@ export default function Chat() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        retryOnError: false,
         body: JSON.stringify({
           message: inputMessage,
           useDeepThinking: isDeepThinking
