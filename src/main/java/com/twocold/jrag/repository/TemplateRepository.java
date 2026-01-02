@@ -17,6 +17,6 @@ public interface TemplateRepository extends CrudRepository<Template, Long> {
     // Find templates created by user
     List<Template> findByUserId(Long userId);
 
-    @Query("SELECT * FROM templates t WHERE t.is_public = true AND (t.visible_groups IS NULL OR t.visible_groups::jsonb ?| ARRAY(SELECT ugm.group_id::text FROM user_group_members ugm WHERE ugm.user_id = :userId))")
+    @Query("SELECT * FROM templates t WHERE t.user_id = :userId OR t.visible_groups IS NULL OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(t.visible_groups::jsonb) AS elem WHERE elem IN (SELECT ugm.group_id::text FROM user_group_members ugm WHERE ugm.user_id = :userId))")
     List<Template> findVisibleTemplatesForUser(@Param("userId") Long userId);
 }

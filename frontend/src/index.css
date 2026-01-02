@@ -2,36 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 142.1 76.2% 36.3%; /* 翡翠绿核心色 */
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 142.1 70% 95%; /* 浅绿色背景用于悬停 */
+    --accent-foreground: 142.1 76.2% 36.3%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 142.1 76.2% 36.3%;
+    --radius: 0.75rem;
+
+    /* Sidebar Variables - Light Island Style */
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 240 10% 3.9%;
+    --sidebar-border: 240 5.9% 90%;
+    --sidebar-active: 142.1 76.2% 36.3%;
+    --sidebar-active-foreground: 355.7 100% 97.3%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 142.1 70.6% 45.3%;
+    --primary-foreground: 144.4 61.4% 10.5%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 142.1 70.6% 45.3%;
+
+    /* Sidebar Variables - Dark Mode */
+    --sidebar: 240 10% 3.9%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-active: 142.1 70.6% 45.3%;
+    --sidebar-active-foreground: 144.4 61.4% 10.5%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+/* Custom Utilities for Glassmorphism */
 @layer utilities {
-  /* 网格背景 */
-  .pattern-grid {
-    background-image:
-      linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
-    background-size: 40px 40px;
+  .glass {
+    @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl;
   }
-
-  /* 点阵背景 */
-  .pattern-dots {
-    background-image: radial-gradient(circle, rgba(59, 130, 246, 0.08) 1px, transparent 1px);
-    background-size: 30px 30px;
-  }
-
-  /* 对角线背景 */
-  .pattern-diagonal {
-    background-image:
-      repeating-linear-gradient(45deg,
-        transparent,
-        transparent 10px,
-        rgba(59, 130, 246, 0.03) 10px,
-        rgba(59, 130, 246, 0.03) 20px
-      );
-  }
-
-  /* 玻璃拟态效果卡片 */
-  .glass-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+  .glass-dark {
+    @apply bg-black/70 backdrop-blur-lg border border-white/10 shadow-xl;
   }
 }

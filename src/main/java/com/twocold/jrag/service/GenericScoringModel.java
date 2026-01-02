@@ -25,16 +25,10 @@ public class GenericScoringModel implements ScoringModel {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
-    public GenericScoringModel(RagProperties.Retrieval.Rerank config) {
+    public GenericScoringModel(RagProperties.Retrieval.Rerank config, RestClient.Builder builder) {
         this.config = config;
         
-        // 设置 30 秒超时
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
-        requestFactory.setReadTimeout(Duration.ofSeconds(30));
-        
-        this.restClient = RestClient.builder()
-                .requestFactory(requestFactory)
-                .build();
+        this.restClient = builder.build();
                 
         this.objectMapper = new ObjectMapper()
                 .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);

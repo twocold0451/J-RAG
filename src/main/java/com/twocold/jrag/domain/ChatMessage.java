@@ -18,6 +18,7 @@ public class ChatMessage {
     private Long conversationId;
     private String role; // USER, ASSISTANT, SYSTEM
     private String content;
+    private String sources;
     private LocalDateTime createdAt;
 
 }

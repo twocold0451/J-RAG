@@ -26,7 +26,7 @@ public class UserGroupService {
 
     @Transactional(readOnly = true)
     public List<UserGroupDto> getAllGroups() {
-        return StreamSupport.stream(userGroupRepository.findAll().spliterator(), false)
+        return StreamSupport.stream(userGroupRepository.findAllByOrderByCreatedAtDesc().spliterator(), false)
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
@@ -89,6 +89,17 @@ public class UserGroupService {
     public List<Long> getGroupMemberIds(Long groupId) {
         return userGroupMemberRepository.findByGroupId(groupId).stream()
                 .map(UserGroupMember::getUserId)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserGroupDto> getGroupsForUser(Long userId) {
+        List<Long> groupIds = userGroupMemberRepository.findByUserId(userId).stream()
+                .map(UserGroupMember::getGroupId)
+                .collect(Collectors.toList());
+
+        return StreamSupport.stream(userGroupRepository.findAllById(groupIds).spliterator(), false)
+                .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
 

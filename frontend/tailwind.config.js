@@ -1,37 +1,82 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ["class"],
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
-  },
-  plugins: [require("daisyui")],
-  daisyui: {
-    themes: [
-      {
-        light: {
-          ...require("daisyui/src/theming/themes")["light"],
-          "primary": "#3B82F6", // A vibrant, modern blue for user messages and primary actions
-          "primary-focus": "#2563EB", // Darker blue on focus
-          "primary-content": "#ffffff",
-          "secondary": "#F0F4F8", // A very light, clean grey for assistant messages
-          "secondary-focus": "#DDE2E7",
-          "secondary-content": "#1F2937", // Dark text for readability
-          "base-100": "#ffffff", // Main background white
-          "base-200": "#F9FAFB", // Light grey for subtle sections
-          "base-300": "#E5E7EB", // Slightly darker grey for borders/dividers
-          "neutral": "#4B5563", // Darker grey for neutral elements
-          "neutral-focus": "#374151",
-          "neutral-content": "#ffffff",
-          "info": "#67E8F9", // A light blue for info (optional)
-          "success": "#22C55E", // Green for success
-          "warning": "#FBBF24", // Amber for warning
-          "error": "#EF4444", // Red for error
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
+    extend: {
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          active: "hsl(var(--sidebar-active))",
         },
       },
-      "dark", // Keep dark theme as an option
-    ],
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+      },
+    },
   },
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 }

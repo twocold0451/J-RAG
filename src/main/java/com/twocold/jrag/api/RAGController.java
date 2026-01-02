@@ -55,15 +55,27 @@ public class RAGController {
     @PostMapping("/ingest-url")
     public ResponseEntity<UploadResponse> ingestUrl(
             @RequestBody com.twocold.jrag.api.dto.UrlIngestRequest request,
+            @RequestParam(name = "category", required = false) String category,
             @CurrentUser Long userId) {
         try {
             // 1. 抓取网页内容
             var result = webCrawlerService.fetchAndSave(request.url());
             
             // 2. 创建文档记录 (使用网页标题作为文件名)
-            // 注意：我们在文件名后追加 .md 后缀，以确保 DocumentChunkerFactory 能正确选择 MarkdownChunker
-            String fileName = result.title() + ".md";
-            Document document = documentService.createDocument(fileName, userId, request.isPublic(), "Web", 0L);
+            // 确定扩展名
+            String tempFileName = result.tempFile().getFileName().toString();
+            String extension = "";
+            int lastDotIndex = tempFileName.lastIndexOf('.');
+            if (lastDotIndex > 0) {
+                extension = tempFileName.substring(lastDotIndex);
+            }
+            
+            String fileName = result.title();
+            if (!fileName.toLowerCase().endsWith(extension)) {
+                fileName += extension;
+            }
+            
+            Document document = documentService.createDocument(fileName, userId, request.isPublic(), category, 0L);
             
             // 3. 触发异步入库
             ingestionService.startIngestion(document.getId(), result.tempFile(), userId, request.isPublic());

@@ -26,7 +26,7 @@ public class LangFuseService {
     private final RagProperties.LangFuse properties;
     private final ObjectMapper objectMapper;
 
-    public LangFuseService(RagProperties ragProperties) {
+    public LangFuseService(RagProperties ragProperties, RestClient.Builder builder) {
         this.properties = ragProperties.langfuse();
         
         this.objectMapper = new ObjectMapper();
@@ -37,7 +37,7 @@ public class LangFuseService {
         this.objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         
         if (properties != null && properties.enabled()) {
-            this.restClient = RestClient.builder()
+            this.restClient = builder
                     .baseUrl(properties.baseUrl())
                     .defaultHeader("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString((properties.publicKey() + ":" + properties.secretKey()).getBytes()))
                     .build();
@@ -57,6 +57,7 @@ public class LangFuseService {
             event.put("id", eventId != null ? eventId : UUID.randomUUID().toString());
             event.put("type", type);
             event.put("timestamp", timestamp.toString());
+
             event.put("body", body);
 
             Map<String, Object> payload = new HashMap<>();

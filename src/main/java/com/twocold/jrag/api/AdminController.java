@@ -2,6 +2,7 @@ package com.twocold.jrag.api;
 
 import com.twocold.jrag.api.dto.AdminUserCreateRequest;
 import com.twocold.jrag.api.dto.AdminUserResponse;
+import java.util.Map;
 import com.twocold.jrag.domain.User;
 import com.twocold.jrag.domain.UserGroupMember;
 import com.twocold.jrag.repository.UserGroupMemberRepository;
@@ -24,7 +25,6 @@ import java.util.stream.StreamSupport;
 public class AdminController {
 
     private final UserService userService;
-    private final UserGroupService userGroupService;
     private final UserGroupMemberRepository userGroupMemberRepository;
 
     @PostMapping("/users")
@@ -80,6 +80,13 @@ public class AdminController {
         }
         
         return ResponseEntity.ok(mapToAdminResponse(user));
+    }
+
+    @PostMapping("/users/{userId}/reset-password")
+    @Transactional
+    public ResponseEntity<Map<String, String>> resetPassword(@PathVariable Long userId) {
+        String newPassword = userService.resetPasswordWithRandom(userId);
+        return ResponseEntity.ok(Map.of("newPassword", newPassword));
     }
 
     private AdminUserResponse mapToAdminResponse(User user) {

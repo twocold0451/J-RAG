@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public class ConversationResponse {
     private Long id;
     private Long userId; // Add userId field
+    private String username;
     private Long templateId;
     private String title;
     @JsonProperty("isPublic")

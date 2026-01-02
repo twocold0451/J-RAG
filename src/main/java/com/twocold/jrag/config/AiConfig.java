@@ -8,6 +8,7 @@ import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.service.AiServices;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
 @Configuration
 public class AiConfig {
@@ -16,12 +17,12 @@ public class AiConfig {
      * 重排序模型需要手动定义，以便支持多种 API 风格（标准/阿里）
      */
     @Bean
-    public ScoringModel scoringModel(RagProperties props) {
+    public ScoringModel scoringModel(RagProperties props, RestClient.Builder builder) {
         var config = props.retrieval().rerank();
         if (config == null || !config.enabled()) {
             return null;
         }
-        return new GenericScoringModel(config);
+        return new GenericScoringModel(config, builder);
     }
 
     @Bean

@@ -14,6 +14,7 @@ import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
@@ -44,6 +45,7 @@ import java.util.Set;
 public class IngestionServiceImpl implements IngestionService {
 
     private final JdbcClient jdbcClient;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final EmbeddingModel embeddingModel;
     private final DocumentService documentService;
     private final SimpMessagingTemplate messagingTemplate;
@@ -86,7 +88,6 @@ public class IngestionServiceImpl implements IngestionService {
             DocumentChunker chunker = chunkerFactory.getChunker(filename);
             
             // 2. 切分文档 (解析责任下放给 Chunker)
-            // Chunker 自行决定如何读取文件 (例如 PDF 需要精细读取，Excel 需要 POI)
             List<TextSegment> rawSegments = chunker.chunk(tempFilePath);
 
             if (rawSegments.isEmpty()) {
@@ -110,70 +111,75 @@ public class IngestionServiceImpl implements IngestionService {
                  log.error("清洗后文档 {} 的所有片段均被过滤掉", documentId);
                  documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.FAILED, 0,
                          "清洗后没有剩余内容");
-                 // ... 处理错误
                  return;
             }
 
-            // 4. 生成嵌入并存储
-            for (int i = 0; i < segments.size(); i++) {
-                TextSegment segment = segments.get(i);
-                // 使用Jieba进行分词，并将分词结果用空格连接
-                List<SegToken> tokens = jiebaSegmenter.process(segment.text(), JiebaSegmenter.SegMode.SEARCH);
-                String contentKeywords = tokens.stream()
-                        .map(item -> item.word)
-                        .filter(word -> !stopWords.contains(word))
-                        .collect(Collectors.joining(" "));
-                
-                List<Embedding> embeddings = embeddingModel.embedAll(List.of(segment)).content();
-                float[] embedding = embeddings.getFirst().vector();
-
-                int currentProgress = (int) ((double) (i + 1) / segments.size() * 100);
-                if (currentProgress % 10 == 0 || i == segments.size() - 1) {
-                    documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.PROCESSING,
-                            currentProgress, null);
-                    messagingTemplate.convertAndSendToUser(
-                            userId.toString(),
-                            "/queue/document-updates",
-                            new DocumentUpdateMessage(documentId, DocumentStatus.PROCESSING, currentProgress, null));
-                    log.info("文档 {} 解析进度: {}%", documentId, currentProgress);
-                }
-
-                String metadataJson = "{}";
-                try {
-                    metadataJson = objectMapper.writeValueAsString(segment.metadata().toMap());
-                } catch (Exception e) {
-                    log.error("无法为文档 {} 序列化元数据", documentId, e);
-                }
-
-                String insertSql = """
+            // 4. 批量生成嵌入并存储
+            int totalSegments = segments.size();
+            int batchSize = 20;
+            
+            String insertSql = """
                         INSERT INTO chunks(id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at)
                         VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?)
                         """;
 
-                // 只在DEBUG级别记录SQL语句，避免生产环境输出
-                if (log.isDebugEnabled()) {
-                    log.debug("入库 INSERT SQL: {}", insertSql);
-                }
+            for (int i = 0; i < totalSegments; i += batchSize) {
+                int end = Math.min(i + batchSize, totalSegments);
+                List<TextSegment> batchSegments = segments.subList(i, end);
+                
+                // 4.1 批量生成 Embeddings
+                List<Embedding> batchEmbeddings = embeddingModel.embedAll(batchSegments).content();
+                
+                // 4.2 准备批量插入的数据
+                final int currentBatchStart = i;
+                jdbcTemplate.batchUpdate(insertSql, new BatchPreparedStatementSetter() {
+                    @Override
+                    public void setValues(java.sql.PreparedStatement ps, int j) throws java.sql.SQLException {
+                        TextSegment segment = batchSegments.get(j);
+                        float[] embedding = batchEmbeddings.get(j).vector();
+                        
+                        // 生成关键词
+                        List<SegToken> tokens = jiebaSegmenter.process(segment.text(), JiebaSegmenter.SegMode.SEARCH);
+                        String contentKeywords = tokens.stream()
+                                .map(item -> item.word)
+                                .filter(word -> !stopWords.contains(word))
+                                .collect(Collectors.joining(" "));
 
-                // 记录处理进度，避免输出敏感的文档内容
-                if (i % 100 == 0 || i == segments.size() - 1) {
-                    int progress = (i + 1) * 100 / segments.size();
-                    log.info("文档 {} 入库进度: {}/{} ({}%), 当前块长度: {} 字符",
-                            documentId, i + 1, segments.size(), progress, segment.text().length());
-                }
+                        // 序列化元数据
+                        String metadataJson = "{}";
+                        try {
+                            metadataJson = objectMapper.writeValueAsString(segment.metadata().toMap());
+                        } catch (Exception e) {
+                            log.error("无法为文档 {} 序列化元数据", documentId, e);
+                        }
 
-                jdbcClient.sql(insertSql)
-                        .params(
-                                UUID.randomUUID(),
-                                documentId,
-                                segment.text().replaceAll("\u0000", ""),
-                                new PGvector(embedding),
-                                i,
-                                metadataJson,
-                                chunker.getClass().getSimpleName(),
-                                contentKeywords,
-                                OffsetDateTime.now())
-                        .update();
+                        ps.setObject(1, UUID.randomUUID());
+                        ps.setObject(2, documentId);
+                        ps.setString(3, segment.text().replaceAll("\u0000", ""));
+                        ps.setObject(4, new PGvector(embedding));
+                        ps.setInt(5, currentBatchStart + j);
+                        ps.setString(6, metadataJson);
+                        ps.setString(7, chunker.getClass().getSimpleName());
+                        ps.setString(8, contentKeywords);
+                        ps.setObject(9, OffsetDateTime.now());
+                    }
+
+                    @Override
+                    public int getBatchSize() {
+                        return batchSegments.size();
+                    }
+                });
+
+                // 4.3 更新进度
+                int currentProgress = (int) ((double) end / totalSegments * 100);
+                documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.PROCESSING,
+                        currentProgress, null);
+                messagingTemplate.convertAndSendToUser(
+                        userId.toString(),
+                        "/queue/document-updates",
+                        new DocumentUpdateMessage(documentId, DocumentStatus.PROCESSING, currentProgress, null));
+                
+                log.info("文档 {} 批量处理进度: {}/{} ({}%)", documentId, end, totalSegments, currentProgress);
             }
 
             documentService.updateDocumentStatusAndProgress(documentId, DocumentStatus.COMPLETED, 100, null);

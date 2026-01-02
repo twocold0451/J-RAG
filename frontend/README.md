@@ -1,88 +1,59 @@
-# J-RAG Frontend
+# 企业知识库系统前端
 
-This is the frontend application for the J-RAG system, built with modern React ecosystem tools.
+基于 RAG 技术的企业级知识管理平台前端项目。
 
-## 🛠️ Tech Stack
+## 技术栈
 
-- **Framework**: [React 19](https://react.dev/)
-- **Build Tool**: [Vite](https://vitejs.dev/)
-- **Language**: TypeScript
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [DaisyUI](https://daisyui.com/)
-- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
-- **Routing**: [React Router v6](https://reactrouter.com/)
-- **HTTP Client**: Axios
-- **Real-time**: WebSocket (STOMP / SockJS)
-- **Markdown Rendering**: react-markdown + remark-gfm
+- React 19 + TypeScript + Vite
+- Tailwind CSS + DaisyUI
+- Zustand 状态管理
+- React Router 路由
+- React Markdown Markdown 渲染
 
-## 🚀 Getting Started
+## 快速开始
 
-### 1. Installation
-
-Navigate to the frontend directory and install dependencies:
+### 安装依赖
 
 ```bash
-cd frontend
 npm install
 ```
 
-### 2. Environment Setup
-
-Create a `.env` file in the `frontend` root directory to configure the backend API connection.
-
-```properties
-# .env
-VITE_API_BASE_URL=http://localhost:8080/api
-```
-
-> **Note**: If you don't create this file, ensure your code has a fallback or that your Vite proxy is configured correctly in `vite.config.js`.
-
-### 3. Development
-
-Start the development server:
+### 开发模式
 
 ```bash
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+访问 http://localhost:5173
 
-### 4. Production Build
+### 环境变量配置
 
-To build the application for production:
+创建 `.env.local` 文件：
+
+```env
+# 开发环境
+VITE_API_BASE_URL=http://localhost:8080/api
+VITE_APP_NAME=企业知识库
+```
+
+### 构建生产版本
 
 ```bash
 npm run build
 ```
 
-The output will be in the `dist` directory. You can preview the production build locally:
+产物在 `dist` 目录，可部署到任意静态托管服务（Vercel、Netlify、Zeabur 等）。
 
-```bash
-npm run preview
-```
 
-## 📂 Project Structure
+## 目录结构
 
 ```
-frontend/
-├── public/          # Static assets
-├── src/
-│   ├── components/  # Reusable UI components
-│   ├── contexts/    # React Contexts (Auth, etc.)
-│   ├── hooks/       # Custom React Hooks
-│   ├── pages/       # Route pages (Login, Chat, etc.)
-│   ├── services/    # API service calls (Axios)
-│   ├── store/       # Zustand state stores
-│   ├── types/       # TypeScript interfaces
-│   ├── utils/       # Helper functions
-│   ├── App.tsx      # Main application component
-│   └── main.tsx     # Entry point
-└── index.html
+src/
+├── api/           # API 调用封装
+├── components/    # 通用组件
+├── hooks/         # 自定义 Hooks
+├── pages/         # 页面组件
+├── store/         # Zustand 状态管理
+├── types/         # TypeScript 类型定义
+└── utils/         # 工具函数
 ```
-
-## 🎨 UI & Styling
-
-We use **DaisyUI** components styled with **Tailwind CSS**. Theme configuration can be found in `tailwind.config.js`.
-
-## 🤝 Contribution
-
-Please ensure your code follows the project's coding standards.

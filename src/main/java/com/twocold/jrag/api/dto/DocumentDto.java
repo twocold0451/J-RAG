@@ -19,6 +19,7 @@ public class DocumentDto {
     private Long userId;          // Add userId field
     @JsonProperty("isPublic")
     private boolean isPublic;     // Add isPublic field
+    private String category;      // Add category field
 
     public static DocumentDto from(Document document) {
         DocumentDto dto = new DocumentDto();
@@ -30,6 +31,7 @@ public class DocumentDto {
         dto.setErrorMessage(document.getErrorMessage()); // Set errorMessage
         dto.setUserId(document.getUserId());           // Set userId
         dto.setPublic(document.isPublic());            // Set isPublic
+        dto.setCategory(document.getCategory());       // Set category
         return dto;
     }
 }

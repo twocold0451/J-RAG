@@ -12,6 +12,8 @@ import java.util.Optional;
 public interface ConversationRepository extends CrudRepository<Conversation, Long> {
     List<Conversation> findAllByUserIdOrderByUpdatedAtDesc(Long userId);
 
+    List<Conversation> findAllByIsPublicTrueOrderByUpdatedAtDesc();
+
     @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
     Optional<Conversation> findConversationById(Long id);
 

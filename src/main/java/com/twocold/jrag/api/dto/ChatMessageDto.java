@@ -9,5 +9,6 @@ public class ChatMessageDto {
     private Long id;
     private String role; // USER, ASSISTANT, SYSTEM
     private String content;
+    private Object sources;
     private LocalDateTime createdAt;
 }

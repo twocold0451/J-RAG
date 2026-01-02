@@ -13,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.UUID;
 
 @Service
 public class UserService {
@@ -113,6 +114,69 @@ public class UserService {
         return userRepository.findById(userId)
                 .map(user -> "ADMIN".equals(user.getRole()))
                 .orElse(false);
+    }
+
+    /**
+     * 重置用户密码（管理员使用，无需当前密码）
+     * @param userId 用户ID
+     * @param newPassword 新密码
+     * @return 生成的新密码（明文）
+     */
+    @Transactional
+    public String resetPassword(Long userId, String newPassword) {
+        User user = findById(userId);
+
+        String salt = generateSalt();
+        String hashedPassword = hashPassword(newPassword, salt);
+        user.setSalt(salt);
+        user.setPasswordHash(hashedPassword);
+        userRepository.save(user);
+
+        return newPassword;
+    }
+
+    /**
+     * 重置用户密码并生成随机密码
+     * @param userId 用户ID
+     * @return 生成的随机密码（明文）
+     */
+    @Transactional
+    public String resetPasswordWithRandom(Long userId) {
+        String randomPassword = generateComplexPassword();
+        return resetPassword(userId, randomPassword);
+    }
+
+    private String generateComplexPassword() {
+        String upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        String lower = "abcdefghijklmnopqrstuvwxyz";
+        String digits = "0123456789";
+        String special = "!@#$%^&*";
+        String all = upper + lower + digits + special;
+
+        SecureRandom random = new SecureRandom();
+        StringBuilder password = new StringBuilder();
+
+        // Ensure at least one of each
+        password.append(upper.charAt(random.nextInt(upper.length())));
+        password.append(lower.charAt(random.nextInt(lower.length())));
+        password.append(digits.charAt(random.nextInt(digits.length())));
+        password.append(special.charAt(random.nextInt(special.length())));
+
+        // Fill the rest
+        for (int i = 4; i < 12; i++) {
+            password.append(all.charAt(random.nextInt(all.length())));
+        }
+
+        // Shuffle
+        char[] passwordArray = password.toString().toCharArray();
+        for (int i = 0; i < passwordArray.length; i++) {
+            int j = random.nextInt(passwordArray.length);
+            char temp = passwordArray[i];
+            passwordArray[i] = passwordArray[j];
+            passwordArray[j] = temp;
+        }
+
+        return new String(passwordArray);
     }
 
     private String generateSalt() {

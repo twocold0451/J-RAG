@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface UserGroupRepository extends CrudRepository<UserGroup, Long> {
     Optional<UserGroup> findByName(String name);
+
+    Iterable<UserGroup> findAllByOrderByCreatedAtDesc();
 }

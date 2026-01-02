@@ -41,6 +41,7 @@ public class ConversationService {
     private final ChatMessageRepository chatMessageRepository;
     private final DocumentRepository documentRepository;
     private final UserRepository userRepository;
+    private final com.twocold.jrag.repository.TemplateRepository templateRepository; // Add TemplateRepository
     private final StreamingChatModel openAiStreamingChatModel;
     private final JdbcTemplate jdbcTemplate;
     private final RetrievalService retrievalService;
@@ -51,6 +52,7 @@ public class ConversationService {
     private final com.twocold.jrag.qa.DeepThinkingAgent deepThinkingAgent;
     private final com.twocold.jrag.repository.TemplateDocumentRepository templateDocumentRepository; // Add repository
     private final UserService userService;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     private Long checkMessageAccess(Long messageId, Long userId) {
         ChatMessage message = chatMessageRepository.findById(messageId)
@@ -84,6 +86,9 @@ public class ConversationService {
         
         // If templateId is provided, add documents from template
         if (templateId != null) {
+            if (!templateRepository.existsById(templateId)) {
+                throw new IllegalArgumentException("未找到模板: " + templateId);
+            }
             List<com.twocold.jrag.domain.TemplateDocument> templateDocs = templateDocumentRepository.findByTemplateId(templateId);
             for (com.twocold.jrag.domain.TemplateDocument td : templateDocs) {
                 finalDocumentIds.add(td.getDocumentId());
@@ -102,10 +107,26 @@ public class ConversationService {
     }
 
     public List<Conversation> getConversationsForUser(Long userId) {
-        String username = userRepository.findById(userId)
-                .map(com.twocold.jrag.domain.User::getUsername)
-                .orElse("");
-        return conversationRepository.findAllVisibleConversations(userId, username);
+        // String username = userRepository.findById(userId)
+        //         .map(com.twocold.jrag.domain.User::getUsername)
+        //         .orElse("");
+        // return conversationRepository.findAllVisibleConversations(userId, username);
+        return conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(userId);
+    }
+
+    // 获取所有公开的对话（团队对话）
+    public List<Conversation> getPublicConversations() {
+        return conversationRepository.findAllByIsPublicTrueOrderByUpdatedAtDesc();
+    }
+
+    // 获取公开对话的消息（不需要用户验证）
+    public List<ChatMessage> getPublicChatMessages(Long conversationId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
+        if (!conversation.isPublic()) {
+            throw new SecurityException("该对话不是公开的");
+        }
+        return chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId);
     }
 
     public List<ChatMessage> getChatMessagesForConversation(Long conversationId, Long userId) {
@@ -286,7 +307,7 @@ public class ConversationService {
                     String answer = deepThinkingAgent.chat(agentMessages);
                     
                     // 将结果作为流发送
-                    emitter.send(answer, MediaType.TEXT_PLAIN);
+                    emitter.send(SseEmitter.event().name("delta").data(answer));
                     
                     // 保存回复
                     ChatMessage aiChatMessage = new ChatMessage();
@@ -302,7 +323,7 @@ public class ConversationService {
                 } catch (Exception e) {
                     log.error("深度思考模式处理失败", e);
                     try {
-                        emitter.send("抱歉，深度思考模式遇到问题: " + e.getMessage(), org.springframework.http.MediaType.TEXT_PLAIN);
+                        emitter.send(SseEmitter.event().name("delta").data("抱歉，深度思考模式遇到问题: " + e.getMessage()));
                     } catch (java.io.IOException ex) {
                         log.error("无法发送错误消息给客户端", ex);
                     }
@@ -323,6 +344,8 @@ public class ConversationService {
             }
 
             List<String> relevantTextSegments = new ArrayList<>();
+            List<Map<String, Object>> sources = new ArrayList<>();
+
             if (!associatedDocumentIds.isEmpty()) {
                 String searchKeyword = userMessageContent;
 
@@ -341,8 +364,40 @@ public class ConversationService {
                 // @Observed handles monitoring
                 List<Chunk> nearestChunks = retrievalService.batchHybridSearch(subQueries, associatedDocumentIds);
 
-                for (Chunk chunk : nearestChunks) relevantTextSegments.add(chunk.getContent());
+                for (Chunk chunk : nearestChunks) {
+                    relevantTextSegments.add(chunk.getContent());
+                    
+                    try {
+                        Map<String, Object> sourceInfo = new HashMap<>();
+                        sourceInfo.put("id", chunk.getId());
+                        sourceInfo.put("documentId", chunk.getDocumentId());
+                        sourceInfo.put("score", chunk.getScore());
+                        if (chunk.getSourceMeta() != null) {
+                             Map<String, Object> meta = objectMapper.readValue(chunk.getSourceMeta(), Map.class);
+                             sourceInfo.put("metadata", meta);
+                             // 提取文件名方便前端直接使用
+                             if (meta.containsKey("file_name")) {
+                                 sourceInfo.put("fileName", meta.get("file_name"));
+                             }
+                        }
+                        sources.add(sourceInfo);
+                    } catch (Exception e) {
+                        log.warn("Failed to parse source meta for chunk {}", chunk.getId());
+                    }
+                }
+                
+                if (!sources.isEmpty()) {
+                    try {
+                        String json = objectMapper.writeValueAsString(sources);
+                        emitter.send(SseEmitter.event().name("sources").data(json));
+                    } catch (Exception e) {
+                        log.error("Failed to send sources event", e);
+                    }
+                }
             }
+
+            // Capture sources for saving in callback
+            final String sourcesJsonToSave = (!sources.isEmpty()) ? convertToJsonSilently(objectMapper, sources) : null;
 
             List<dev.langchain4j.data.message.ChatMessage> messages = new ArrayList<>();
             latestMessages.stream()
@@ -365,7 +420,7 @@ public class ConversationService {
                 @Override
                 public void onPartialResponse(String token) {
                     try {
-                        emitter.send(token, org.springframework.http.MediaType.TEXT_PLAIN);
+                        emitter.send(SseEmitter.event().name("delta").data(token));
                     } catch (Exception e) {
                         emitter.completeWithError(e);
                     }
@@ -377,6 +432,7 @@ public class ConversationService {
                     aiChatMessage.setRole("ASSISTANT");
                     aiChatMessage.setContent(response.aiMessage().text());
                     aiChatMessage.setCreatedAt(LocalDateTime.now());
+                    aiChatMessage.setSources(sourcesJsonToSave);
                     chatMessageRepository.save(aiChatMessage);
                     conversation.setUpdatedAt(LocalDateTime.now());
                     conversationRepository.save(conversation);
@@ -394,6 +450,15 @@ public class ConversationService {
             throw e; // Re-throw so Aspect can record the error
         } finally {
             TraceContext.clear();
+        }
+    }
+    
+    private String convertToJsonSilently(com.fasterxml.jackson.databind.ObjectMapper mapper, Object obj) {
+        try {
+            return mapper.writeValueAsString(obj);
+        } catch (Exception e) {
+            log.warn("JSON serialization failed", e);
+            return null;
         }
     }
 

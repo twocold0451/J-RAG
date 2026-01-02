@@ -1,10 +1,12 @@
 package com.twocold.jrag.api;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.twocold.jrag.api.dto.*;
 import com.twocold.jrag.config.CurrentUser;
 import com.twocold.jrag.domain.ChatMessage;
 import com.twocold.jrag.domain.Conversation;
 import com.twocold.jrag.domain.Document;
+import com.twocold.jrag.repository.UserRepository;
 import com.twocold.jrag.service.ConversationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,9 +21,13 @@ import java.util.stream.Collectors;
 public class ConversationController {
 
     private final ConversationService conversationService;
+    private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
 
-    public ConversationController(ConversationService conversationService) {
+    public ConversationController(ConversationService conversationService, ObjectMapper objectMapper, UserRepository userRepository) {
         this.conversationService = conversationService;
+        this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
     }
 
     @PostMapping
@@ -45,6 +51,25 @@ public class ConversationController {
         List<Conversation> conversations = conversationService.getConversationsForUser(userId);
         return ResponseEntity.ok(conversations.stream()
                 .map(this::convertToResponse)
+                .collect(Collectors.toList()));
+    }
+
+    // 团队对话 - 获取公开对话列表（管理员使用）
+    @GetMapping("/public")
+    public ResponseEntity<List<ConversationResponse>> getPublicConversations() {
+        List<Conversation> conversations = conversationService.getPublicConversations();
+        return ResponseEntity.ok(conversations.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList()));
+    }
+
+    // 团队对话 - 获取公开对话的消息
+    @GetMapping("/{conversationId}/public/messages")
+    public ResponseEntity<List<ChatMessageDto>> getPublicChatMessages(
+            @PathVariable Long conversationId) {
+        List<ChatMessage> messages = conversationService.getPublicChatMessages(conversationId);
+        return ResponseEntity.ok(messages.stream()
+                .map(this::convertToDto)
                 .collect(Collectors.toList()));
     }
 
@@ -124,13 +149,18 @@ public class ConversationController {
     private ConversationResponse convertToResponse(Conversation conversation) {
         ConversationResponse response = new ConversationResponse();
         response.setId(conversation.getId());
-        response.setUserId(conversation.getUserId()); // Set userId
-        response.setTemplateId(conversation.getTemplateId()); // Set templateId
+        response.setUserId(conversation.getUserId());
+        response.setTemplateId(conversation.getTemplateId());
         response.setTitle(conversation.getTitle());
         response.setPublic(conversation.isPublic());
         response.setParentId(conversation.getParentId());
         response.setCreatedAt(conversation.getCreatedAt());
         response.setUpdatedAt(conversation.getUpdatedAt());
+
+        // 获取用户名
+        userRepository.findById(conversation.getUserId())
+                .ifPresent(user -> response.setUsername(user.getUsername()));
+
         return response;
     }
 
@@ -140,6 +170,13 @@ public class ConversationController {
         dto.setRole(message.getRole());
         dto.setContent(message.getContent());
         dto.setCreatedAt(message.getCreatedAt());
+        if (message.getSources() != null) {
+            try {
+                dto.setSources(objectMapper.readValue(message.getSources(), List.class));
+            } catch (Exception e) {
+                // ignore
+            }
+        }
         return dto;
     }
     
