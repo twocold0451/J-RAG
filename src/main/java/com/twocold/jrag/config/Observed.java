@@ -1,4 +1,4 @@
-package com.twocold.jrag.api.config;
+package com.twocold.jrag.config;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

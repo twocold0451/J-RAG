@@ -3,7 +3,7 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     
     <property name="LOG_PATH" value="logs"/>
-    <property name="LOG_FILE" value="${LOG_PATH}/qarag.log"/>
+    <property name="LOG_FILE" value="${LOG_PATH}/jrag.log"/>
 
     <!-- 彩色日志格式 -->
     <property name="CONSOLE_LOG_PATTERN" value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"/>
@@ -23,7 +23,7 @@
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_FILE}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/qarag-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <fileNamePattern>${LOG_PATH}/jrag-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
             <!-- 每个文件最大 10MB，保留 30 天，总大小限制 1GB -->
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>30</maxHistory>

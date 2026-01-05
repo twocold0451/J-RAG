@@ -60,7 +60,7 @@ public class WebCrawlerService {
         // 净化文件名
         String safeFilename = filename.replaceAll("[\\\\/:*?\"<>|]", "_");
 
-        Path tempDir = Files.createTempDirectory("qarag_crawl_pdf_");
+        Path tempDir = Files.createTempDirectory("jrag_crawl_pdf_");
         Path tempFile = tempDir.resolve(safeFilename);
 
         try (InputStream stream = response.bodyStream()) {
@@ -99,7 +99,7 @@ public class WebCrawlerService {
                 """, title, url, url, java.time.LocalDateTime.now(), markdown);
 
         // 3. 保存为临时文件
-        Path tempDir = Files.createTempDirectory("qarag_crawl_");
+        Path tempDir = Files.createTempDirectory("jrag_crawl_");
         Path tempFile = tempDir.resolve(safeFilename + ".md");
         Files.writeString(tempFile, content);
 

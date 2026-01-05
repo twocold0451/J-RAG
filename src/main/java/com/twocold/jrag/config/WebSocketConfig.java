@@ -26,11 +26,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // 注册 "/ws" 端点，并启用 SockJS 回退选项。
-        // 此处使用 SockJS 是为了实现更广泛的浏览器兼容性。
+        // 注册 "/ws" 端点
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*") // 考虑在生产环境中对此进行限制
-                .withSockJS();
+                .setAllowedOriginPatterns("*"); // 考虑在生产环境中对此进行限制
     }
 
     @Override

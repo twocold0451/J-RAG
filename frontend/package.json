@@ -23,6 +23,7 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.1",
+    "@stomp/stompjs": "^7.2.1",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-table": "^8.20.5",
     "class-variance-authority": "^0.7.0",
@@ -32,8 +33,6 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.26.2",
-    "sockjs-client": "^1.6.1",
-    "stompjs": "^2.3.3",
     "tailwind-merge": "^2.5.3",
     "zustand": "^5.0.0"
   },

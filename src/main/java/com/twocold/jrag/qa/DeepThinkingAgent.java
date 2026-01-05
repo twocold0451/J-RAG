@@ -1,6 +1,6 @@
 package com.twocold.jrag.qa;
 
-import com.twocold.jrag.api.config.Observed;
+import com.twocold.jrag.config.Observed;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.service.SystemMessage;
 

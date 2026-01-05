@@ -7,9 +7,11 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+@Slf4j
 @Component
 public class WebSocketJwtChannelInterceptor implements ChannelInterceptor {
 
@@ -23,6 +25,10 @@ public class WebSocketJwtChannelInterceptor implements ChannelInterceptor {
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor =
                 MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+        
+        if (accessor != null) {
+            log.info("WebSocket Interceptor: Command={}, Headers={}", accessor.getCommand(), accessor.toNativeHeaderMap());
+        }
 
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
             List<String> authorization = accessor.getNativeHeader("Authorization");

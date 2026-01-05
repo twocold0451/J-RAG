@@ -2,6 +2,7 @@
 
 ![Java](https://img.shields.io/badge/Java-21+-ED8B00?style=flat&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.x-6DB33F?style=flat&logo=spring&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)
 ![LangChain4j](https://img.shields.io/badge/LangChain4j-1.10.0-blue?style=flat)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat&logo=postgresql&logoColor=white)
 ![LangFuse](https://img.shields.io/badge/LangFuse-Observability-black?style=flat&logo=target&logoColor=white)
@@ -11,12 +12,88 @@
 
 ---
 
+## 🚀 快速开始 (Docker Compose)
+
+这是最快的部署方式，包含后端、前端和带向量扩展的 PostgreSQL 数据库。
+
+### 1. 准备环境配置
+在项目根目录创建 `.env` 文件，并根据你的模型供应商（如阿里云、DeepSeek、SiliconFlow 等）填写配置：
+
+```bash
+# 复制模板
+cp .env.example .env
+# 编辑配置
+nano .env
+```
+
+**.env 配置模板 (包含可选功能)：**
+```env
+# --- 基础配置 (必填) ---
+# 数据库 (Docker 内部自动连接)
+# 注意：已启用 Schema 隔离 (jrag_core)
+DB_URL=jdbc:postgresql://db:5432/jrag?currentSchema=jrag_core
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+
+# LLM 聊天模型 (OpenAI 协议)
+CHAT_MODEL_API_KEY=
+CHAT_MODEL_BASE_URL=
+CHAT_MODEL_NAME=
+
+# Embedding 向量模型
+EMBEDDING_MODEL_API_KEY=
+EMBEDDING_MODEL_BASE_URL=
+EMBEDDING_MODEL_NAME=
+
+# 安全配置 (建议 32 位以上随机字符串)
+JWT_SECRET=your_custom_long_secret_string
+
+# --- 高级功能 (可选) ---
+# Rerank 重排 (提升检索精度)
+RERANK_ENABLED=true
+RERANK_API_KEY=
+RERANK_BASE_URL=
+RERANK_MODEL_NAME=
+
+# Vision 视觉 (用于 OCR 和图片理解)
+VISION_ENABLED=true
+VISION_API_KEY=
+VISION_BASE_URL=
+VISION_MODEL_NAME=
+
+# LangFuse 可观测性 (追踪调用链路)
+LANGFUSE_ENABLED=true
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_BASE_URL=
+```
+
+### 2. 一键启动
+确保你已安装 Docker 和 Docker Compose，然后在根目录执行：
+
+```bash
+docker-compose up -d --build
+```
+
+### 3. 访问系统
+- **前端界面**: `http://localhost:5173`
+- **后端 API**: `http://localhost:8080`
+- **数据库**: `localhost:5432` (jrag)
+
+### 4. 默认管理员账号
+系统在首次启动时会通过 Flyway 自动初始化一个管理员账号：
+- **用户名**: `admin`
+- **密码**: `XHy@azy5Mhy2`
+- **建议**: 登录后请立即进入“用户管理”或“设置”页面修改默认密码。
+
+---
+
 ## 🌟 核心特性
 
 - **🔐 安全认证**: 完整的用户注册与登录流程，采用 JWT 进行安全保护。
-    - **👥 多租户与权限管理**:
+    - **👥 用户与权限管理**:
         - **用户分组**: 支持创建不同的用户组 (如 "研发部", "市场部")，方便人员管理。
-        - **细粒度权限**: 基于组的资源访问控制 (RBAC)，精确控制不同用户组可见的对话模板和知识库范围。
+        - **资源隔离**: 基于组的资源访问控制 (RBAC)，精确控制不同用户组可见的对话模板和知识库范围。
         - **管理员后台**: 提供可视化的用户管理、分组管理和密码重置功能。
 - **📝 对话模板 (Conversation Templates)**:
     - **场景预设**: 管理员可创建特定主题的对话模板 (如 "HR 助手", "技术支持")，预置提示词和参数。
@@ -32,7 +109,7 @@
     - **查询增强**:
         - **上下文重写**: 自动补全对话背景，消除指代不明。
         - **复杂查询分解**: 将对比、多步推理等复杂问题智能拆解为多个子查询，并行检索以获得更全面的上下文。
-        - **深度思考模式 (Deep Thinking Mode)**: 基于 **ReAct (Reasoning + Acting)** 范式构建的 Agent。针对极度复杂的问题，LLM 能够自主规划、调用工具（检索/分解）、观察结果并自我反思，直到收集到足够信息才给出最终答案。
+        - **ReAct Agent (深度思考模式)**: 基于 **ReAct (Reasoning + Acting)** 范式构建的 Agent。针对极度复杂的问题，LLM 能够自主规划、调用工具（检索/分解）、观察结果并自我反思，直到收集到足够信息才给出最终答案。
     - **结果重排 (Re-ranking)**: 引入 RRF (倒数排名融合) 与 MMR (最大边界相关性) 算法，确保结果的准确性与多样性。
     - **来源溯源**: 每条回答均精准标注原文引用出处，支持点击跳转。
 - **📊 全链路可观测性**:
@@ -55,71 +132,31 @@
 
 ---
 
-## 🚀 快速开始
+## 🛠️ 本地开发环境搭建 (手动)
+
+如果你需要进行代码调试或二次开发，请按以下步骤操作。
 
 ### 1. 环境准备
-- **Java 21+**: 确保安装了 JDK 21 或更高版本。
-- **Maven**: 用于构建后端。
-- **Node.js**: 用于构建前端。
-- **PostgreSQL**: 需要安装并启用 `vector` 扩展。
-
-### 2. 启动数据库
-请确保你有一个可用的 PostgreSQL 数据库。
-1.  创建一个名为 `qarag` (或其他名称) 的数据库。
-2.  **关键步骤**：在数据库中执行以下 SQL 命令以启用向量扩展：
+- **Java 21+**, **Maven**, **Node.js**.
+- **PostgreSQL**: 安装并启用 `vector` 扩展：
     ```sql
     CREATE EXTENSION IF NOT EXISTS vector;
     ```
 
-### 3. 系统配置
-你需要配置大模型 API、数据库连接以及 JWT 密钥。
-推荐在项目根目录创建环境变量，或者直接修改 `src/main/resources/application.properties`。
+### 2. 系统配置
+参照根目录下的 `.env.example` 文件，配置你的环境变量。
+- **后端**: 修改 `src/main/resources/application.properties` 或设置系统环境变量。
+- **前端**: 在 `frontend/` 目录下根据需要配置 `.env`。
 
-#### 核心配置项
-| 配置项 | 环境变量 | 说明 |
-|--------|----------|------|
-| **LLM (聊天)** | `CHAT_MODEL_API_KEY` | **必填**。聊天模型的 API Key。 |
-| | `CHAT_MODEL_BASE_URL` | 模型厂商的 Base URL (如阿里云、DeepSeek)。 |
-| | `CHAT_MODEL_NAME` | 模型名称 (如 `qwen-max`, `gpt-4o`)。 |
-| **Embedding (向量)** | `EMBEDDING_MODEL_API_KEY` | **必填**。向量模型的 API Key。 |
-| | `EMBEDDING_MODEL_BASE_URL` | 向量模型 Base URL。 |
-| **Rerank (重排)** | `RERANK_API_KEY` | 重排序模型 API Key。 |
-| | `RERANK_BASE_URL` | 重排序模型 Base URL (如 DashScope, SiliconFlow, Jina AI)。 |
-| | `RERANK_MODEL_NAME` | 模型名称 (如 `qwen3-rerank`, `bge-reranker-v2-m3`, `jina-reranker-v2-base-multilingual`)。 |
-| **Vision (视觉)** | `VISION_API_KEY` | 选填。用于 OCR 和图片理解。 |
-| | `VISION_BASE_URL` | 视觉模型 Base URL。 |
-| **数据库** | `DB_URL` | JDBC 连接地址 (如 `jdbc:postgresql://localhost:5432/qarag`)。 |
-| | `DB_USERNAME` | 数据库用户名。 |
-| | `DB_PASSWORD` | 数据库密码。 |
-| **可观测性** | `LANGFUSE_PUBLIC_KEY` | LangFuse Public Key (pk-...)。 |
-| | `LANGFUSE_SECRET_KEY` | LangFuse Secret Key (sk-...)。 |
-| | `LANGFUSE_BASE_URL` | LangFuse API 地址 (默认 https://cloud.langfuse.com)。 |
-| **安全** | `JWT_SECRET` | **必填**。生成 Token 的密钥 (建议 32 位以上随机字符串)。 |
-
-#### RAG 参数调优
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `app.rag.retrieval.top-k` | 5 | 每次检索召回的片段数量。 |
-| `app.rag.chunking.size` | 1000 | 文档切分的最大字符数。 |
-| `app.rag.chunking.overlap` | 300 | 切分块之间的重叠字符数。 |
-
-### 4. 运行后端
-使用 Maven 启动 Spring Boot 应用：
+### 3. 运行项目
+**运行后端**:
 ```bash
 mvn spring-boot:run
 ```
-- 服务将在 `http://localhost:8080` 启动。
-- Flyway 会自动执行数据库迁移脚本，建立表结构。
-
-### 5. 运行前端
-进入前端目录并启动开发服务器：
+**运行前端**:
 ```bash
-cd frontend
-npm install
-npm run dev
+cd frontend && npm install && npm run dev
 ```
-- 前端将在 `http://localhost:5173` 启动。
-- 确保在前端目录下配置 `.env` (如果需要) 或依赖 Vite 代理连接后端。
 
 ---
 
@@ -234,7 +271,7 @@ J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 
 ### 📄 数据摄取增强
 - [ ] **跨页表格处理**: 优化 PDF 解析，智能合并跨页表格。
-- [ ] **文本清洗与噪音过滤**: 优化解析逻辑，自动过滤多余空格、重复换行及无效符号，提升数据纯净度。
+- [x] **文本清洗与噪音过滤**: 优化解析逻辑，自动过滤多余空格、重复换行及无效符号，提升数据纯净度。
 
 ### 🧠 Jina AI 深度优化
 - [ ] **全栈集成**: 统一接入 **Jina Reader** (抓取)、**Embeddings v3** (向量化) 和 **Reranker** (重排)。
@@ -247,6 +284,20 @@ J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 - [x] **后台管理系统**: 前端重构，支持用户管理、分组管理、对话模板配置及权限关联。
 - [ ] **管理仪表板**: 可视化向量库状态，支持人工修正切分块，查看聊天日志。
 
+### 📊评估与质量保障
+- [ ] **建立 RAG 评估三元组 (RAG Triad)**
+    - **Context Relevance**: 评估检索内容与问题的相关性。
+    - **Faithfulness / Groundedness**: 评估回答是否忠实于检索到的上下文（防止幻觉）。
+    - **Answer Relevance**: 评估回答是否直接解决了用户的问题。
+- [ ] **集成 Langfuse 自动评分 (LLM-as-a-Judge)**
+    - 在 Langfuse 后台配置基于模板的自动评估任务。
+    - 利用 GPT-4o 作为裁判，对生产环境的真实对话进行持续打分。
+- [ ] **引入 Ragas 专业指标 (离线评估)**
+    - 编写评估脚本，计算 Context Precision, Context Recall 等深度指标。
+    - 定期跑测以监控系统迭代带来的质量波动。
+- [ ] **构建“黄金数据集” (Golden Dataset)**
+    - 整理 50+ 典型问答对作为 Benchmark。
+    - 实现自动化回归测试，确保功能优化不导致质量倒退。
 ---
 
 ## 📄 开源协议
@@ -255,4 +306,4 @@ J-RAG 采用**双层策略模式**来实现高质量的文档摄取：
 
 ---
 
-_Built with ❤️ by [TwoCold](https://github.com/twocold0451)_
+_Built with ❤️ by [twocold0451](https://github.com/twocold0451)_

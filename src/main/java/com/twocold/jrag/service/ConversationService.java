@@ -1,6 +1,6 @@
 package com.twocold.jrag.service;
 
-import com.twocold.jrag.api.config.Observed;
+import com.twocold.jrag.config.Observed;
 import com.twocold.jrag.config.RagProperties;
 import com.twocold.jrag.config.TraceContext;
 import com.twocold.jrag.domain.Chunk;
@@ -20,7 +20,6 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

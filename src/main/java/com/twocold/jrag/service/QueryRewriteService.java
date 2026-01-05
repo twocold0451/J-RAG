@@ -1,6 +1,6 @@
 package com.twocold.jrag.service;
 
-import com.twocold.jrag.api.config.Observed;
+import com.twocold.jrag.config.Observed;
 import com.twocold.jrag.config.RagProperties;
 import com.twocold.jrag.config.TraceContext;
 import com.twocold.jrag.domain.ChatMessage;

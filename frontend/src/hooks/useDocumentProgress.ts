@@ -1,4 +1,5 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState } from 'react'
+import { Client } from '@stomp/stompjs'
 
 export interface DocumentUpdate {
   documentId: string
@@ -9,8 +10,6 @@ export interface DocumentUpdate {
 
 export function useDocumentProgress(userId: string | number | null) {
   const [updates, setUpdates] = useState<Map<string, DocumentUpdate>>(new Map())
-  const clientRef = useRef<any>(null)
-  const subscriptionRef = useRef<any>(null)
 
   // 获取用户 ID
   const getUserId = useCallback(() => {
@@ -27,60 +26,55 @@ export function useDocumentProgress(userId: string | number | null) {
 
   useEffect(() => {
     const uid = getUserId()
+    
     if (!uid) return
 
-    let StompClient: any
-    let sockjs: any
+    const token = localStorage.getItem('token')
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const brokerURL = `${protocol}//${window.location.host}/ws`
 
-    const initWebSocket = async () => {
-      try {
-        const SockJS = (await import('sockjs-client')).default
-        const Stomp = (await import('stompjs')).default
+    const client = new Client({
+      brokerURL,
+      
+      // 添加鉴权头
+      connectHeaders: {
+        Authorization: token ? `Bearer ${token}` : '',
+      },
+      
+      // 自动重连配置
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
 
-        const wsUrl = `${window.location.origin}/ws`
-        sockjs = new SockJS(wsUrl)
-        StompClient = Stomp.over(sockjs)
+      onConnect: () => {
+        // 订阅个人文档更新频道 (Spring User Destination)
+        client.subscribe('/user/queue/document-updates', (message) => {
+          try {
+            const update = JSON.parse(message.body) as DocumentUpdate
+            setUpdates((prev) => {
+              const next = new Map(prev)
+              next.set(update.documentId, update)
+              return next
+            })
+          } catch (err) {
+            console.error('Failed to parse document update:', err)
+          }
+        })
+      },
 
-        clientRef.current = StompClient
-
-        StompClient.connect(
-          {},
-          () => {
-            subscriptionRef.current = StompClient.subscribe(
-              `/user/${uid}/queue/document-updates`,
-              (message: any) => {
-                try {
-                  const update = JSON.parse(message.body) as DocumentUpdate
-                  setUpdates((prev) => {
-                    const next = new Map(prev)
-                    next.set(update.documentId, update)
-                    return next
-                  })
-                } catch (err) {
-                  console.error('Failed to parse document update:', err)
-                }
-              }
-            )
-          },
-          () => {} // Connected silently
-        )
-      } catch (err) {
-        // WebSocket init silently failed, progress won't be tracked
+      onStompError: (frame) => {
+        console.error('Broker reported error: ' + frame.headers['message'])
       }
+    })
+
+    try {
+      client.activate()
+    } catch (err) {
+      console.error('WebSocket activation failed:', err)
     }
 
-    initWebSocket()
-
     return () => {
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe()
-      }
-      if (StompClient) {
-        StompClient.disconnect(() => {})
-      }
-      if (sockjs) {
-        sockjs.close()
-      }
+      client.deactivate()
     }
   }, [getUserId])
 

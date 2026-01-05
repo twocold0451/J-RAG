@@ -20,6 +20,17 @@ public interface DocumentChunker {
     List<TextSegment> chunk(Path filePath);
 
     /**
+     * 将文档切分为文本片段 (带进度回调)
+     *
+     * @param filePath         原始文件路径
+     * @param progressCallback 进度回调 (已处理数量, 总数量) - 某些切分器可能无法预知总数量，此时 total 可能为 -1
+     * @return 切分后的文本片段列表
+     */
+    default List<TextSegment> chunk(Path filePath, java.util.function.BiConsumer<Integer, Integer> progressCallback) {
+        return chunk(filePath);
+    }
+
+    /**
      * 判断是否支持该文件类型
      *
      * @param filename 文件名（包含扩展名）

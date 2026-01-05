@@ -48,7 +48,6 @@ export default function Documents() {
   const [urlInput, setUrlInput] = useState('')
   const [urlCategory, setUrlCategory] = useState('人事')
   const [isUrlLoading, setIsUrlLoading] = useState(false)
-  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // WebSocket progress tracking
@@ -118,6 +117,7 @@ export default function Documents() {
         setIsUploadOpen(false)
         setSelectedFiles([])
         showToast('文档正在后台处理中', 'success')
+        loadDocuments()
       }, 500)
     } catch (err: any) {
       console.error('Upload failed:', err)
@@ -137,6 +137,7 @@ export default function Documents() {
         setIsUploadOpen(false)
         setUrlInput('')
         showToast('文档正在后台处理中', 'success')
+        loadDocuments()
       }, 500)
     } catch (err: any) {
       console.error('URL ingest failed:', err)
@@ -275,40 +276,70 @@ export default function Documents() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredDocuments.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">
-                    📄
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{doc.name}</div>
-                    <div className="text-sm text-muted-foreground flex gap-4 mt-1">
-                      <span>上传于 {formatDate(doc.uploadedAt)}</span>
+              {filteredDocuments.map((doc) => {
+                const progressUpdate = getProgress(doc.id)
+                const displayStatus = progressUpdate?.status || doc.status
+                const displayProgress = progressUpdate?.progress || doc.progress || 0
+
+                return (
+                  <div
+                    key={doc.id}
+                    className="flex flex-col gap-2 p-4 rounded-lg border hover:border-primary/50 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">
+                        📄
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{doc.name}</div>
+                        <div className="text-sm text-muted-foreground flex gap-4 mt-1">
+                          <span>上传于 {formatDate(doc.uploadedAt)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-1 rounded-full text-xs ${categoryColors[doc.category || ''] || 'bg-muted text-muted-foreground'}`}>
+                          {doc.category}
+                        </span>
+                        <span className={`px-2.5 py-1 rounded-full text-xs ${statusMap[displayStatus || '']?.color || 'bg-muted text-muted-foreground'}`}>
+                          {statusMap[displayStatus || '']?.label || displayStatus}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-xl text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          onClick={() => handleDeleteClick(doc.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
+
+                    {/* In-list Progress Bar for Processing Documents */}
+                    {displayStatus === 'PROCESSING' && (
+                      <div className="mt-2 pl-16 pr-4 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>正在解析入库...</span>
+                          <span className="font-medium">{displayProgress}%</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all duration-300"
+                            style={{ width: `${displayProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {displayStatus === 'FAILED' && (progressUpdate?.errorMessage || doc.errorMessage) && (
+                      <div className="mt-1 pl-16 pr-4 text-xs text-red-500 italic">
+                        错误: {progressUpdate?.errorMessage || doc.errorMessage}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-1 rounded-full text-xs ${categoryColors[doc.category || ''] || 'bg-muted text-muted-foreground'}`}>
-                      {doc.category}
-                    </span>
-                    <span className={`px-2.5 py-1 rounded-full text-xs ${statusMap[doc.status || '']?.color || 'bg-muted text-muted-foreground'}`}>
-                      {statusMap[doc.status || '']?.label || doc.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 rounded-xl text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                      onClick={() => handleDeleteClick(doc.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
               {filteredDocuments.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -419,42 +450,10 @@ export default function Documents() {
                   </div>
                 </div>
 
-                {/* Progress Bar */}
-                {uploadingDocId && (() => {
-                  const progress = getProgress(uploadingDocId)
-                  if (!progress) return null
-                  return (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2">
-                          <Loader2 className={cn("w-4 h-4 animate-spin", progress.status === 'COMPLETED' ? 'text-green-500' : 'text-yellow-500')} />
-                          {progress.status === 'PROCESSING' && '文档处理中...'}
-                          {progress.status === 'COMPLETED' && '处理完成'}
-                          {progress.status === 'FAILED' && '处理失败'}
-                        </span>
-                        <span className="font-medium">{progress.progress}%</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full transition-all duration-300",
-                            progress.status === 'FAILED' ? 'bg-red-500' : 'bg-primary'
-                          )}
-                          style={{ width: `${progress.progress}%` }}
-                        />
-                      </div>
-                      {progress.errorMessage && (
-                        <p className="text-xs text-red-500">{progress.errorMessage}</p>
-                      )}
-                    </div>
-                  )
-                })()}
-
                 <DialogFooter className="p-6 bg-muted/5 border-t mt-4">
                   <Button variant="outline" onClick={() => {
                     setIsUploadOpen(false)
                     clearProgress()
-                    setUploadingDocId(null)
                   }} className="rounded-xl">取消</Button>
                   <Button
                     onClick={handleUpload}
@@ -511,42 +510,10 @@ export default function Documents() {
                   </div>
                 </div>
 
-                {/* Progress Bar */}
-                {uploadingDocId && (() => {
-                  const progress = getProgress(uploadingDocId)
-                  if (!progress) return null
-                  return (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2">
-                          <Loader2 className={cn("w-4 h-4 animate-spin", progress.status === 'COMPLETED' ? 'text-green-500' : 'text-yellow-500')} />
-                          {progress.status === 'PROCESSING' && '文档处理中...'}
-                          {progress.status === 'COMPLETED' && '处理完成'}
-                          {progress.status === 'FAILED' && '处理失败'}
-                        </span>
-                        <span className="font-medium">{progress.progress}%</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full transition-all duration-300",
-                            progress.status === 'FAILED' ? 'bg-red-500' : 'bg-primary'
-                          )}
-                          style={{ width: `${progress.progress}%` }}
-                        />
-                      </div>
-                      {progress.errorMessage && (
-                        <p className="text-xs text-red-500">{progress.errorMessage}</p>
-                      )}
-                    </div>
-                  )
-                })()}
-
                 <DialogFooter className="p-6 bg-muted/5 border-t mt-4">
                   <Button variant="outline" onClick={() => {
                     setIsUploadOpen(false)
                     clearProgress()
-                    setUploadingDocId(null)
                   }} className="rounded-xl">取消</Button>
                   <Button
                     onClick={handleUrlSubmit}

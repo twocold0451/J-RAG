@@ -41,7 +41,7 @@ public class VisionService {
     }
 
     /**
-     * 使用视觉模型分析图片
+     * 使用视觉模型分析图片 (带重试机制)
      *
      * @param image  要分析的图片
      * @param prompt 分析提示词
@@ -53,13 +53,39 @@ public class VisionService {
             return "[视觉模型未启用]";
         }
 
-        try {
-            String base64Image = encodeImageToBase64(image);
-            return callVisionApi(base64Image, prompt);
-        } catch (Exception e) {
-            log.error("Failed to analyze image: {}", e.getMessage(), e);
-            return "[图片分析失败: " + e.getMessage() + "]";
+        int maxRetries = 3;
+        long waitTime = 2000; // 初始等待 2 秒
+
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                String base64Image = encodeImageToBase64(image);
+                return callVisionApi(base64Image, prompt);
+            } catch (Exception e) {
+                // 如果是最后一次尝试，记录错误并返回
+                if (i == maxRetries - 1) {
+                    log.error("Failed to analyze image after {} attempts: {}", maxRetries, e.getMessage());
+                    return "[图片分析失败: " + e.getMessage() + "]";
+                }
+
+                // 检查是否值得重试 (限流或超时)
+                String msg = e.getMessage();
+                boolean isRateLimit = msg != null && (msg.contains("429") || msg.contains("Too Many Requests") || msg.contains("Quota"));
+                boolean isTimeout = msg != null && (msg.contains("timeout") || msg.contains("Time out"));
+                
+                // 为了稳健性，Vision API 的网络错误通常都值得重试
+                log.warn("Vision API 调用失败 (尝试 {}/{}): {}. 等待 {}ms 后重试...", 
+                        i + 1, maxRetries, e.getMessage(), waitTime);
+                
+                try {
+                    Thread.sleep(waitTime);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return "[处理被中断]";
+                }
+                waitTime *= 2; // 指数退避
+            }
         }
+        return "[图片分析失败: 重试次数超限]";
     }
 
     /**

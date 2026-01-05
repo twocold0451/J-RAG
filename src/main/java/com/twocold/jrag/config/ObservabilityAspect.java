@@ -1,6 +1,5 @@
-package com.twocold.jrag.api.config;
+package com.twocold.jrag.config;
 
-import com.twocold.jrag.config.TraceContext;
 import com.twocold.jrag.service.LangFuseService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

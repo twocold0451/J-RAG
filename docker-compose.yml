@@ -1,22 +1,69 @@
 version: '3.8'
 
 services:
+  # --- Database Service ---
   db:
-    # We use a Docker image that comes with PostgreSQL 16 and pgvector pre-installed.
     image: pgvector/pgvector:pg16
-    container_name: qarag-postgres
+    container_name: jrag-postgres
+    restart: always
     environment:
-      # These credentials should match the ones in 'src/main/resources/application.properties'
-      POSTGRES_DB: postgres
+      POSTGRES_DB: jrag
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
-    # Healthcheck to ensure the database is ready before the application starts (in a full setup)
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d jrag"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - jrag-network
+
+  # --- Backend Service (Spring Boot) ---
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: qarag-backend
+    restart: always
+    
+    # 核心改动：直接加载 .env 文件中的所有变量
+    env_file:
+      - .env
+    environment:
+      # 仅保留需要重命名或覆盖的特殊变量
+      # Spring Boot 默认不识别 DB_URL，需要手动映射
+      SPRING_DATASOURCE_URL: ${DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      
+      # 确保生产环境配置生效
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - jrag-network
+
+  # --- Frontend Service (React + Nginx) ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: jrag-frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - jrag-network
+
+networks:
+  jrag-network:
+    driver: bridge

@@ -8,11 +8,11 @@ import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan("com.twocold.jrag.config")
-@EnableAsync // Add this annotation
-public class QaragApplication {
+@EnableAsync
+public class JragApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(QaragApplication.class, args);
+        SpringApplication.run(JragApplication.class, args);
     }
 
 }

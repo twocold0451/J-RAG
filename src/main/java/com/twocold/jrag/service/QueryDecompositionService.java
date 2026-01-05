@@ -1,6 +1,6 @@
 package com.twocold.jrag.service;
 
-import com.twocold.jrag.api.config.Observed;
+import com.twocold.jrag.config.Observed;
 import com.twocold.jrag.config.TraceContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

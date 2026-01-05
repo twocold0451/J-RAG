@@ -9,12 +9,6 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     },
   },
-  define: {
-    global: 'window',
-  },
-  optimizeDeps: {
-    exclude: ['stompjs'],
-  },
   build: {
     chunkSizeWarningLimit: 1000,
   },

@@ -2,6 +2,8 @@ package com.twocold.jrag.service;
 
 import com.twocold.jrag.config.CacheConfig;
 import com.twocold.jrag.domain.User;
+import com.twocold.jrag.exception.AuthenticationFailedException;
+import com.twocold.jrag.exception.ResourceNotFoundException;
 import com.twocold.jrag.repository.UserRepository;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -46,11 +48,11 @@ public class UserService {
 
     public User login(String username, String password) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("用户名或密码无效"));
+                .orElseThrow(() -> new AuthenticationFailedException("用户名或密码无效"));
 
         String inputHashed = hashPassword(password, user.getSalt());
         if (!inputHashed.equals(user.getPasswordHash())) {
-            throw new IllegalArgumentException("用户名或密码无效");
+            throw new AuthenticationFailedException("用户名或密码无效");
         }
 
         return user;
@@ -61,7 +63,7 @@ public class UserService {
         User user = findById(userId);
         String currentHashed = hashPassword(currentPassword, user.getSalt());
         if (!currentHashed.equals(user.getPasswordHash())) {
-            throw new IllegalArgumentException("当前密码错误");
+            throw new AuthenticationFailedException("当前密码错误");
         }
         
         String newSalt = generateSalt();
@@ -106,7 +108,7 @@ public class UserService {
 
     public User findById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("未找到用户"));
+                .orElseThrow(() -> new ResourceNotFoundException("未找到用户"));
     }
 
     @Cacheable(value = CacheConfig.USER_ADMIN_CACHE, key = "#userId")

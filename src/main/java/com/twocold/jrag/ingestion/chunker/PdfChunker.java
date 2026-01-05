@@ -37,6 +37,11 @@ public class PdfChunker implements DocumentChunker {
 
     @Override
     public List<TextSegment> chunk(Path filePath) {
+        return chunk(filePath, null);
+    }
+
+    @Override
+    public List<TextSegment> chunk(Path filePath, java.util.function.BiConsumer<Integer, Integer> progressCallback) {
         log.debug("对 PDF 文档使用 PdfChunker: {}", filePath.getFileName());
 
         List<TextSegment> segments = new ArrayList<>();
@@ -77,38 +82,46 @@ public class PdfChunker implements DocumentChunker {
 
                 if (pageContent.isBlank()) {
                     log.debug("Page {} has no extractable content, skipping", pageNum);
-                    continue;
-                }
+                } else {
+                    // 记录处理的元素类型 (去重)
+                    String elementTypes = results.stream()
+                            .filter(r -> r.success() && r.content() != null && !r.content().isBlank())
+                            .map(r -> r.elementType().name())
+                            .distinct()
+                            .collect(Collectors.joining(", "));
+                    
+                    log.debug("第 {} 页处理的元素类型: {}", pageNum, elementTypes);
 
-                // 记录处理的元素类型 (去重)
-                String elementTypes = results.stream()
-                        .filter(r -> r.success() && r.content() != null && !r.content().isBlank())
-                        .map(r -> r.elementType().name())
-                        .distinct()
-                        .collect(Collectors.joining(", "));
-                
-                log.debug("第 {} 页处理的元素类型: {}", pageNum, elementTypes);
+                    // 如果单页内容超过 chunk size，进行二次切分
+                    if (pageContent.length() > ragProperties.chunking().size()) {
+                        Document pageDoc = Document.from(pageContent);
+                        List<TextSegment> pageSegments = splitter.split(pageDoc);
 
-                // 如果单页内容超过 chunk size，进行二次切分
-                if (pageContent.length() > ragProperties.chunking().size()) {
-                    Document pageDoc = Document.from(pageContent);
-                    List<TextSegment> pageSegments = splitter.split(pageDoc);
-
-                    for (TextSegment seg : pageSegments) {
-                        TextSegment segmentWithMeta = TextSegment.from(
-                                seg.text(),
+                        for (TextSegment seg : pageSegments) {
+                            TextSegment segmentWithMeta = TextSegment.from(
+                                    seg.text(),
+                                    Metadata.from("page", String.valueOf(pageNum))
+                                            .put("source", filePath.getFileName().toString())
+                                            .put("elements", elementTypes));
+                            segments.add(segmentWithMeta);
+                        }
+                    } else {
+                        TextSegment segment = TextSegment.from(
+                                pageContent,
                                 Metadata.from("page", String.valueOf(pageNum))
                                         .put("source", filePath.getFileName().toString())
                                         .put("elements", elementTypes));
-                        segments.add(segmentWithMeta);
+                        segments.add(segment);
                     }
-                } else {
-                    TextSegment segment = TextSegment.from(
-                            pageContent,
-                            Metadata.from("page", String.valueOf(pageNum))
-                                    .put("source", filePath.getFileName().toString())
-                                    .put("elements", elementTypes));
-                    segments.add(segment);
+                }
+
+                // 报告进度
+                if (progressCallback != null) {
+                    try {
+                        progressCallback.accept(pageNum, totalPages);
+                    } catch (Exception e) {
+                        log.warn("进度回调执行失败", e);
+                    }
                 }
             }
 

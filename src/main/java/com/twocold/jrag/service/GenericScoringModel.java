@@ -1,7 +1,7 @@
 package com.twocold.jrag.service;
 
 import com.twocold.jrag.config.RagProperties;
-import com.twocold.jrag.api.config.Observed;
+import com.twocold.jrag.config.Observed;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.segment.TextSegment;
@@ -10,9 +10,7 @@ import dev.langchain4j.model.scoring.ScoringModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.client.RestClient;
 
-import java.time.Duration;
 import java.util.*;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 /**
  * 通用的评分模型实现，支持标准 OpenAI 风格和阿里云百炼风格的重排 API。
