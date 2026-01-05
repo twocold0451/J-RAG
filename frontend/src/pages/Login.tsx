@@ -21,7 +21,7 @@ function RotatingRing({ className, reverse = false }: { className: string; rever
 export default function Login() {
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
-  const [formData, setFormData] = useState({ username: '', password: '' })
+  const [formData, setFormData] = useState({ username: '肯德基', password: 'snmPt$1RdFXm' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
