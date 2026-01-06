@@ -66,15 +66,15 @@ export default function Settings() {
     setIsLoading(true)
     setMessage(null)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      await api.changePassword(passwordForm.currentPassword, passwordForm.newPassword)
       setMessage({ type: 'success', text: '密码修改成功' })
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
-
-      // Clear success message after 3 seconds
-      setTimeout(() => setMessage(null), 3000)
-    }, 1000)
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : '密码修改失败' })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleGeneratePassword = () => {
