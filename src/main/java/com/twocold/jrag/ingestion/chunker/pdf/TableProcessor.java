@@ -68,8 +68,8 @@ public class TableProcessor implements PdfElementProcessor {
                 content.append(markdown);
             }
 
-            log.debug("从第 {} 页提取了 {} 个表格，区域: {}",
-                    tables.size(), pageNumber, tableRegions);
+            log.debug("从第 {} 页提取了 {} 个表格",
+                    tables.size(), pageNumber);
             return PdfElementResult.success(content.toString(), PdfElementType.TEXT_TABLE,
                     pageNumber, tableRegions);
 

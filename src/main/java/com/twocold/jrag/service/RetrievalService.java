@@ -122,7 +122,7 @@ public class RetrievalService {
                     String vectorSql = "SELECT id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
                             "FROM chunks " +
                             "WHERE document_id IN (" + documentIdsClause + ") " +
-                            "ORDER BY content_vector <=> ? " +
+                            "ORDER BY content_vector <=> ?::vector " +
                             "LIMIT ?";
                     // MMR Parameters
                     int fetchK = searchK * 3; 

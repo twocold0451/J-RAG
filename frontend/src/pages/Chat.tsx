@@ -161,6 +161,8 @@ export default function Chat() {
       setMessages(prev => [...prev, placeholderMessage])
     }
 
+    const ctrl = new AbortController()
+
     try {
       await fetchEventSource(`${apiUrl}/conversations/${selectedConversation.id}/chat/stream`, {
         method: 'POST',
@@ -172,9 +174,24 @@ export default function Chat() {
           message: inputMessage,
           useDeepThinking: isDeepThinking
         }),
+        signal: ctrl.signal,
+        openWhenHidden: true, // 防止切换标签页时重连
+        
+        async onopen(response) {
+          if (response.ok) {
+            return
+          }
+          // 如果响应不是 2xx，抛出错误并中止，防止重试
+          const errorText = await response.text().catch(() => 'Unknown Error')
+          ctrl.abort() // 关键：手动中止以阻止库的自动重试逻辑
+          throw new Error(`Server Error (${response.status}): ${errorText}`)
+        },
+
         async onmessage(msg) {
-          if (msg.event === 'delta') {
-            // 处理文本增量
+          // 调试日志：如果仍然没有显示，请查看控制台输出的数据内容
+          // console.log('SSE Message:', msg.event, msg.data)
+
+          if (msg.event === 'delta' || !msg.event) {
             const textDelta = msg.data
             setMessages(prev => {
               const lastMsg = prev[prev.length - 1]
@@ -185,21 +202,26 @@ export default function Chat() {
                   content: lastMsg.content + textDelta
                 }
                 return updated
+              } else {
+                return [...prev, {
+                  id: Date.now(),
+                  role: 'assistant',
+                  content: textDelta,
+                  timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+                }]
               }
-              return prev
             })
           } else if (msg.event === 'sources') {
-            // 处理引用来源
             try {
               const sourcesData = JSON.parse(msg.data) as SourceInfo[]
               const displaySources: DisplaySource[] = sourcesData.map(s => ({
                 fileName: s.metadata?.source || '未知文档',
                 page: s.metadata?.page?.toString() || '-'
               }))
-              // 去重
               const uniqueSources = displaySources.filter((item, index, self) =>
                 index === self.findIndex(s => s.fileName === item.fileName && s.page === item.page)
-              ).slice(0, 5) // 最多显示5个
+              ).slice(0, 5)
+              
               setMessages(prev => {
                 const lastMsg = prev[prev.length - 1]
                 if (lastMsg && lastMsg.role === 'assistant') {
@@ -217,36 +239,35 @@ export default function Chat() {
             }
           }
         },
+        onclose() {
+          // 正常结束，手动中止以防止库尝试重连
+          ctrl.abort()
+        },
         onerror(err) {
-          console.error('SSE Error:', err)
-          // 超时或网络错误时更新 UI
-          if (err instanceof Error && (err.name === 'TimeoutError' || err.message.includes('timeout'))) {
-            setMessages(prev => {
-              const lastMsg = prev[prev.length - 1]
-              if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
-                return [...prev.slice(0, -1), {
-                  ...lastMsg,
-                  content: '处理时间较长，请稍后查看回复。'
-                }]
-              }
-              return prev
-            })
+          // 如果是主动中止的错误，不记录为异常
+          if (ctrl.signal.aborted) {
+            return
           }
-          throw err
+          console.error('SSE Error:', err)
+          ctrl.abort()
+          throw err 
         }
       })
     } catch (err: any) {
+      // 忽略主动中止引发的错误
+      if (err.name === 'AbortError') {
+        return
+      }
       // 检查是否已经有 AI 回复（部分成功）
       setMessages(prev => {
         const lastMsg = prev[prev.length - 1]
         if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content) {
           return prev
         }
-        // 没有回复，显示错误
         return [...prev.slice(0, -1), {
           id: Date.now() + 1,
           role: 'assistant',
-          content: `错误: ${err.message || '未知错误'}`,
+          content: `错误: ${err.message || '连接已中断'}`,
           timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
         }]
       })
@@ -453,7 +474,15 @@ export default function Chat() {
                         <pre className="whitespace-pre-wrap font-sans bg-transparent p-0 m-0 border-none">{message.content}</pre>
                       ) : (
                         <div className="prose prose-sm max-w-none dark:prose-invert">
-                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                          {message.content ? (
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          ) : (
+                            <div className="flex items-center gap-1.5 py-1">
+                              <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce" />
+                              <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-150" />
+                              <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-300" />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -479,18 +508,6 @@ export default function Chat() {
                 </div>
               ))}
 
-              {isLoading && (
-                <div className="flex gap-4 max-w-3xl mx-auto">
-                  <Avatar className="w-8 h-8 bg-primary/10 border border-primary/20">
-                    <AvatarFallback className="text-primary bg-transparent"><Bot className="w-5 h-5" /></AvatarFallback>
-                  </Avatar>
-                  <div className="bg-muted/50 px-5 py-4 rounded-2xl rounded-tl-sm border flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce" />
-                    <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-150" />
-                    <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-300" />
-                  </div>
-                </div>
-              )}
               <div ref={messagesEndRef} className="h-4" />
             </div>
 

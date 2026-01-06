@@ -21,19 +21,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationFailedException.class)
     public ResponseEntity<Map<String, Object>> handleAuthenticationFailedException(AuthenticationFailedException ex, WebRequest request) {
         Map<String, Object> body = createErrorBody(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header("Content-Type", "application/json")
+                .body(body);
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleResourceNotFoundException(ResourceNotFoundException ex, WebRequest request) {
         Map<String, Object> body = createErrorBody(HttpStatus.NOT_FOUND, ex.getMessage(), request);
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .header("Content-Type", "application/json")
+                .body(body);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex, WebRequest request) {
         Map<String, Object> body = createErrorBody(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .header("Content-Type", "application/json")
+                .body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -48,13 +54,17 @@ public class GlobalExceptionHandler {
         });
         body.put("errors", errors);
         
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .header("Content-Type", "application/json")
+                .body(body);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNoResourceFoundException(NoResourceFoundException ex, WebRequest request) {
         Map<String, Object> body = createErrorBody(HttpStatus.NOT_FOUND, ex.getMessage(), request);
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .header("Content-Type", "application/json")
+                .body(body);
     }
 
     // 处理权限相关异常（如果引入了 Spring Security，通常会抛出 AccessDeniedException）
@@ -62,14 +72,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(SecurityException.class)
     public ResponseEntity<Map<String, Object>> handleSecurityException(SecurityException ex, WebRequest request) {
         Map<String, Object> body = createErrorBody(HttpStatus.FORBIDDEN, "拒绝访问: " + ex.getMessage(), request);
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .header("Content-Type", "application/json")
+                .body(body);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGlobalException(Exception ex, WebRequest request) {
         Map<String, Object> body = createErrorBody(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), request);
         // 在生产环境中，可能不希望将详细的堆栈信息返回给前端，这里仅返回 message
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .header("Content-Type", "application/json")
+                .body(body);
     }
 
     private Map<String, Object> createErrorBody(HttpStatus status, String message, WebRequest request) {

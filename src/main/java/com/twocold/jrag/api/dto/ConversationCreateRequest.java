@@ -1,5 +1,6 @@
 package com.twocold.jrag.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -16,8 +17,9 @@ public class ConversationCreateRequest {
     @Setter
     @Getter
     private List<UUID> documentIds;
+    @JsonProperty("isPublic")
     private boolean isPublic;
     private Long parentId;
-    private String allowedUsers; // New field
+    private String allowedUsers;
 
 }

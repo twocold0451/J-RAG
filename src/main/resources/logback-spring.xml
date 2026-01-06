@@ -39,7 +39,6 @@
     <logger name="org.springframework" level="INFO"/>
     <logger name="org.hibernate" level="INFO"/>
     <logger name="com.zaxxer.hikari" level="INFO"/>
-    <logger name="dev.langchain4j" level="INFO"/>
     <logger name="org.apache.http" level="INFO"/>
 
     <!-- 开发环境配置 -->
@@ -52,6 +51,7 @@
 
     <!-- 生产环境配置 -->
     <springProfile name="prod">
+        <logger name="dev.langchain4j" level="WARN"/>
         <logger name="com.twocold.jrag" level="INFO"/>
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
