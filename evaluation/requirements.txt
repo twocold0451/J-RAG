@@ -1,0 +1,7 @@
+ragas>=0.4.2
+pandas
+psycopg2-binary
+pyyaml
+datasets
+langchain-openai
+python-dotenv

@@ -1,0 +1,20 @@
+# 数据库配置
+database:
+  host: "localhost"
+  port: 5432
+  name: "jrag"
+  user: "postgres"
+  password: "postgres" # 注意：生产环境请使用环境变量或更安全的方式
+  schema: "jrag_core"
+
+# OpenAI / LLM 配置 (用于 Ragas Judge)
+openai:
+  api_key: "sk-..." # 替换为你的 OpenAI API Key，或者设置环境变量 OPENAI_API_KEY
+  base_url: "https://api.openai.com/v1" # 如果使用代理或兼容接口，请修改
+  model: "gpt-4o" # 推荐使用 GPT-4 级别模型以获得准确评分
+
+# 评估采样配置
+sampling:
+  limit: 20             # 每次评估抽取的样本数量
+  min_query_length: 4   # 过滤掉字数少于此值的查询
+  days_lookback: 7      # 仅评估最近 N 天的数据

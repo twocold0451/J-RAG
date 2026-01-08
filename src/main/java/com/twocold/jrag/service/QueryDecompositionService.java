@@ -66,25 +66,27 @@ public class QueryDecompositionService {
             TraceContext.setNextGenerationName("LLM: Query Decomposition");
             String response = chatModel.chat(prompt).trim();
 
-            if (response.startsWith("```")) {
-                response = response.substring(3);
-                if (response.toLowerCase().startsWith("json")) {
-                    response = response.substring(4);
-                }
-                response = response.trim();
-                if (response.endsWith("```")) {
-                    response = response.substring(0, response.length() - 3).trim();
+            // 1. 清理可能的 Markdown 标记
+            String jsonContent = response;
+            if (jsonContent.contains("```")) {
+                // 尝试提取 ```json ... ``` 或 ``` ... ``` 之间的内容
+                Matcher codeBlockMatcher = Pattern.compile("```(?:json)?\\s*(.*?)\\s*```", Pattern.DOTALL).matcher(jsonContent);
+                if (codeBlockMatcher.find()) {
+                    jsonContent = codeBlockMatcher.group(1).trim();
                 }
             }
 
-            Matcher matcher = JSON_ARRAY_PATTERN.matcher(response);
-            if (matcher.find()) {
-                response = matcher.group();
+            // 2. 如果清理后还是不像数组，再尝试用正则提取第一个 [ ] 块
+            if (!jsonContent.startsWith("[")) {
+                Matcher matcher = JSON_ARRAY_PATTERN.matcher(jsonContent);
+                if (matcher.find()) {
+                    jsonContent = matcher.group();
+                }
             }
 
             try {
-                log.debug("Processed response before parsing: {}", response);
-                List<String> subQueries = objectMapper.readValue(response, new TypeReference<>() {});
+                log.debug("Processed response before parsing: {}", jsonContent);
+                List<String> subQueries = objectMapper.readValue(jsonContent, new TypeReference<>() {});
                 if (subQueries == null || subQueries.isEmpty()) {
                     log.error("Empty decomposition result, fallback to original.");
                     return List.of(query);

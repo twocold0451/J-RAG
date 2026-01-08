@@ -10,11 +10,11 @@
 
 **J-RAG** 是一个基于 **Spring Boot** 和 **LangChain4j** 构建的稳健全栈 RAG 系统。它将您的私有数据与大语言模型 (LLM) 连接起来，提供精准且具备上下文感知能力的智能问答。
 
+**🌐 演示地址**: [https://jrag.zeabur.app/](https://jrag.zeabur.app/)
+
 ---
 
 ## 🚀 快速开始 (Docker Compose)
-
-这是最快的部署方式，包含后端、前端和带向量扩展的 PostgreSQL 数据库。
 
 ### 1. 准备环境配置
 在项目根目录创建 `.env` 文件，并根据你的模型供应商（如阿里云、DeepSeek、SiliconFlow 等）填写配置：
@@ -74,6 +74,10 @@ LANGFUSE_BASE_URL=
 ```bash
 docker-compose up -d --build
 ```
+
+> **⚠️ 注意事项**:
+> *   容器首次启动时会自动创建名为 `jrag` 的数据库。
+> *   如果你之前运行过本项目（或存在旧的 `postgres-data` 目录），可能会因为旧数据冲突导致数据库创建失败。此时请先删除项目根目录下的 `postgres-data` 文件夹，再重新启动。
 
 ### 3. 访问系统
 - **前端界面**: `http://localhost:5173`
@@ -157,6 +161,43 @@ mvn spring-boot:run
 ```bash
 cd frontend && npm install && npm run dev
 ```
+
+---
+
+## 📊 RAG 质量评估
+
+`evaluation` 目录包含了用于评估 RAG 管道性能的脚本，目前主要使用 [Ragas](https://github.com/explodinggradients/ragas) 框架。
+
+### 1. 配置评估环境
+
+在 `evaluation/` 目录下，复制并编辑配置文件：
+
+```bash
+cp evaluation/config.yaml.example evaluation/config.yaml
+nano evaluation/config.yaml
+```
+
+**`config.yaml` 关键配置项:**
+
+-   `database`: 配置用于评估的数据库连接信息。
+-   `openai`: 配置用于“裁判”的 LLM (LLM-as-a-Judge) 的 API 信息。推荐使用 GPT-4 级别模型以保证评估的准确性。
+-   `sampling`: 配置每次评估时从 `rag_interactions` 表中抽取的样本数量等。
+
+### 2. 安装依赖
+
+```bash
+pip install -r evaluation/requirements.txt
+```
+
+### 3. 运行评估脚本
+
+目前提供 `faithfulness` 指标的评估，它用来衡量模型的回答是否忠实于检索到的上下文。
+
+```bash
+python evaluation/evaluate_faithfulness.py
+```
+
+脚本会自动连接数据库，抽取最新的问答记录，使用配置的 LLM 进行打分，并将详细结果保存在 `evaluation/evaluation_results.csv` 文件中。
 
 ---
 

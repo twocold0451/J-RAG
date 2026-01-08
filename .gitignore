@@ -28,3 +28,7 @@ CLAUDE.md
 
 /docs
 /frontend-old
+/evaluation/config.yaml
+/web/WEB-INF/web.xml
+/web/web/WEB-INF/web.xml
+/evaluation/*.csv

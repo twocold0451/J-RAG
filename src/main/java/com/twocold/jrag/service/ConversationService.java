@@ -1,17 +1,13 @@
 package com.twocold.jrag.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.twocold.jrag.config.Observed;
 import com.twocold.jrag.config.RagProperties;
 import com.twocold.jrag.config.TraceContext;
-import com.twocold.jrag.domain.Chunk;
-import com.twocold.jrag.domain.ChatMessage;
-import com.twocold.jrag.domain.Conversation;
-import com.twocold.jrag.domain.Document;
+import com.twocold.jrag.domain.*;
 import com.twocold.jrag.qa.AgentContext;
-import com.twocold.jrag.repository.ChatMessageRepository;
-import com.twocold.jrag.repository.ConversationRepository;
-import com.twocold.jrag.repository.DocumentRepository;
-import com.twocold.jrag.repository.UserRepository;
+import com.twocold.jrag.qa.DeepThinkingAgent;
+import com.twocold.jrag.repository.*;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -39,8 +35,7 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final DocumentRepository documentRepository;
-    private final UserRepository userRepository;
-    private final com.twocold.jrag.repository.TemplateRepository templateRepository; // Add TemplateRepository
+    private final TemplateRepository templateRepository;
     private final StreamingChatModel openAiStreamingChatModel;
     private final JdbcTemplate jdbcTemplate;
     private final RetrievalService retrievalService;
@@ -48,10 +43,10 @@ public class ConversationService {
     private final QueryDecompositionService queryDecompositionService;
     private final LangFuseService langFuseService;
     private final RagProperties ragProperties;
-    private final com.twocold.jrag.qa.DeepThinkingAgent deepThinkingAgent;
-    private final com.twocold.jrag.repository.TemplateDocumentRepository templateDocumentRepository; // Add repository
+    private final DeepThinkingAgent deepThinkingAgent;
+    private final TemplateDocumentRepository templateDocumentRepository;
     private final UserService userService;
-    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper;
 
     private Long checkMessageAccess(Long messageId, Long userId) {
         ChatMessage message = chatMessageRepository.findById(messageId)
@@ -106,10 +101,6 @@ public class ConversationService {
     }
 
     public List<Conversation> getConversationsForUser(Long userId) {
-        // String username = userRepository.findById(userId)
-        //         .map(com.twocold.jrag.domain.User::getUsername)
-        //         .orElse("");
-        // return conversationRepository.findAllVisibleConversations(userId, username);
         return conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(userId);
     }
 
@@ -344,6 +335,7 @@ public class ConversationService {
 
             List<String> relevantTextSegments = new ArrayList<>();
             List<Map<String, Object>> sources = new ArrayList<>();
+            String finalRewrittenQuery = null;
 
             if (!associatedDocumentIds.isEmpty()) {
                 String searchKeyword = userMessageContent;
@@ -354,6 +346,7 @@ public class ConversationService {
                     List<ChatMessage> historyToPass = chronologicalHistory != null ? chronologicalHistory : new ArrayList<>();
                     searchKeyword = queryRewriteService.rewriteIfNecessary(userMessageContent, historyToPass);
                 }
+                finalRewrittenQuery = searchKeyword;
 
                 // 2. Decompose
                 // @Observed handles monitoring
@@ -371,6 +364,9 @@ public class ConversationService {
                         sourceInfo.put("id", chunk.getId());
                         sourceInfo.put("documentId", chunk.getDocumentId());
                         sourceInfo.put("score", chunk.getScore());
+                        // Store content for Ragas evaluation
+                        sourceInfo.put("content", chunk.getContent());
+
                         if (chunk.getSourceMeta() != null) {
                              Map<String, Object> meta = objectMapper.readValue(chunk.getSourceMeta(), Map.class);
                              sourceInfo.put("metadata", meta);
@@ -397,6 +393,7 @@ public class ConversationService {
 
             // Capture sources for saving in callback
             final String sourcesJsonToSave = (!sources.isEmpty()) ? convertToJsonSilently(objectMapper, sources) : null;
+            final String capturedRewrittenQuery = finalRewrittenQuery;
 
             List<dev.langchain4j.data.message.ChatMessage> messages = new ArrayList<>();
             latestMessages.stream()
@@ -426,13 +423,43 @@ public class ConversationService {
                 }
                 @Override
                 public void onCompleteResponse(ChatResponse response) {
-                    ChatMessage aiChatMessage = new ChatMessage();
-                    aiChatMessage.setConversationId(conversationId);
-                    aiChatMessage.setRole("ASSISTANT");
-                    aiChatMessage.setContent(response.aiMessage().text());
-                    aiChatMessage.setCreatedAt(LocalDateTime.now());
-                    aiChatMessage.setSources(sourcesJsonToSave);
-                    chatMessageRepository.save(aiChatMessage);
+                    try {
+                        String aiResponseText = response.aiMessage().text();
+
+                        ChatMessage aiChatMessage = new ChatMessage();
+                        aiChatMessage.setConversationId(conversationId);
+                        aiChatMessage.setRole("ASSISTANT");
+                        aiChatMessage.setContent(aiResponseText);
+                        aiChatMessage.setCreatedAt(LocalDateTime.now());
+                        aiChatMessage.setSources(sourcesJsonToSave);
+                        chatMessageRepository.save(aiChatMessage);
+
+                    // 2. Save detailed RAG Interaction Log for Evaluation
+                    try {
+                        String insertSql = """
+                            INSERT INTO rag_interactions 
+                            (trace_id, conversation_id, user_id, user_query, rewritten_query, ai_response, retrieved_contexts, created_at) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+                        """;
+                        
+                        jdbcTemplate.update(insertSql, 
+                            traceId, 
+                            conversationId, 
+                            userId, 
+                            userMessageContent, 
+                            capturedRewrittenQuery, 
+                            aiResponseText, 
+                            sourcesJsonToSave, 
+                            LocalDateTime.now()
+                        );
+                    } catch (Exception e) {
+                        log.error("Failed to save RAG interaction log", e);
+                        // Do not fail the request just because logging failed
+                    }
+                    } catch (Exception e) {
+                        log.error("Failed to save RAG interaction log", e);
+                    }
+
                     conversation.setUpdatedAt(LocalDateTime.now());
                     conversationRepository.save(conversation);
                     emitter.complete();
