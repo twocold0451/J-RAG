@@ -28,7 +28,7 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    container_name: qarag-backend
+    container_name: jrag-backend
     restart: always
     
     # 核心改动：直接加载 .env 文件中的所有变量

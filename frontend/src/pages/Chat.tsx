@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Plus, MessageSquare, Trash2, Bot, User, FileText } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -144,9 +143,6 @@ export default function Chat() {
     setInputMessage('')
     setIsLoading(true)
 
-    const token = localStorage.getItem('token')
-    const apiUrl = (import.meta.env?.VITE_API_BASE_URL as string) || '/api'
-
     // 检查是否已经有助手消息（欢迎消息），用于更新而不是添加新的
     const hasWelcomeMessage = messages[messages.length - 1]?.content?.includes('已为您创建')
 
@@ -164,35 +160,14 @@ export default function Chat() {
     const ctrl = new AbortController()
 
     try {
-      await fetchEventSource(`${apiUrl}/conversations/${selectedConversation.id}/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+      await api.streamChat(
+        selectedConversation.id,
+        {
           message: inputMessage,
           useDeepThinking: isDeepThinking
-        }),
-        signal: ctrl.signal,
-        openWhenHidden: true, // 防止切换标签页时重连
-        
-        async onopen(response) {
-          if (response.ok) {
-            return
-          }
-          // 如果响应不是 2xx，抛出错误并中止，防止重试
-          const errorText = await response.text().catch(() => 'Unknown Error')
-          ctrl.abort() // 关键：手动中止以阻止库的自动重试逻辑
-          throw new Error(`Server Error (${response.status}): ${errorText}`)
         },
-
-        async onmessage(msg) {
-          // 调试日志：如果仍然没有显示，请查看控制台输出的数据内容
-          // console.log('SSE Message:', msg.event, msg.data)
-
-          if (msg.event === 'delta' || !msg.event) {
-            const textDelta = msg.data
+        {
+          onMessage: (textDelta) => {
             setMessages(prev => {
               const lastMsg = prev[prev.length - 1]
               if (lastMsg && lastMsg.role === 'assistant') {
@@ -211,48 +186,41 @@ export default function Chat() {
                 }]
               }
             })
-          } else if (msg.event === 'sources') {
-            try {
-              const sourcesData = JSON.parse(msg.data) as SourceInfo[]
-              const displaySources: DisplaySource[] = sourcesData.map(s => ({
-                fileName: s.metadata?.source || '未知文档',
-                page: s.metadata?.page?.toString() || '-'
-              }))
-              const uniqueSources = displaySources.filter((item, index, self) =>
-                index === self.findIndex(s => s.fileName === item.fileName && s.page === item.page)
-              ).slice(0, 5)
-              
-              setMessages(prev => {
-                const lastMsg = prev[prev.length - 1]
-                if (lastMsg && lastMsg.role === 'assistant') {
-                  const updated = [...prev]
-                  updated[updated.length - 1] = {
-                    ...lastMsg,
-                    sources: uniqueSources
-                  }
-                  return updated
+          },
+          onSources: (sourcesData: SourceInfo[]) => {
+            const displaySources: DisplaySource[] = sourcesData.map(s => ({
+              fileName: s.metadata?.source || '未知文档',
+              page: s.metadata?.page?.toString() || '-'
+            }))
+            const uniqueSources = displaySources.filter((item, index, self) =>
+              index === self.findIndex(s => s.fileName === item.fileName && s.page === item.page)
+            ).slice(0, 5)
+            
+            setMessages(prev => {
+              const lastMsg = prev[prev.length - 1]
+              if (lastMsg && lastMsg.role === 'assistant') {
+                const updated = [...prev]
+                updated[updated.length - 1] = {
+                  ...lastMsg,
+                  sources: uniqueSources
                 }
-                return prev
-              })
-            } catch (e) {
-              console.error('解析来源数据失败', e)
-            }
+                return updated
+              }
+              return prev
+            })
+          },
+          onClose: () => {
+            ctrl.abort()
+          },
+          onError: (err) => {
+            if (ctrl.signal.aborted) return
+            console.error('SSE Error:', err)
+            ctrl.abort()
+            throw err
           }
         },
-        onclose() {
-          // 正常结束，手动中止以防止库尝试重连
-          ctrl.abort()
-        },
-        onerror(err) {
-          // 如果是主动中止的错误，不记录为异常
-          if (ctrl.signal.aborted) {
-            return
-          }
-          console.error('SSE Error:', err)
-          ctrl.abort()
-          throw err 
-        }
-      })
+        ctrl.signal
+      )
     } catch (err: any) {
       // 忽略主动中止引发的错误
       if (err.name === 'AbortError') {

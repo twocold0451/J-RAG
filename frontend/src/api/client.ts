@@ -1,3 +1,4 @@
+import { fetchEventSource } from '@microsoft/fetch-event-source'
 import type {
   UserResponse,
   DocumentDto,
@@ -16,6 +17,13 @@ import type {
 } from '@/types'
 
 const API_BASE = (import.meta.env?.VITE_API_BASE_URL as string) || '/api'
+
+interface StreamChatCallbacks {
+  onMessage: (data: string) => void
+  onSources?: (sources: any[]) => void
+  onError?: (error: Error) => void
+  onClose?: () => void
+}
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -148,6 +156,51 @@ export const api = {
         throw new Error(`请求失败: ${response.status}`)
       }
       return response.body as ReadableStream
+    })
+  },
+
+  // 封装 SSE 流式聊天
+  streamChat: async (
+    conversationId: number,
+    data: ChatRequest,
+    callbacks: StreamChatCallbacks,
+    signal?: AbortSignal
+  ) => {
+    const token = localStorage.getItem('token')
+    const { onMessage, onSources, onError, onClose } = callbacks
+
+    await fetchEventSource(`${API_BASE}/chat/${conversationId}/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+      signal,
+      openWhenHidden: true,
+      async onopen(response) {
+        if (response.ok) return
+        const errorText = await response.text().catch(() => 'Unknown Error')
+        throw new Error(`Server Error (${response.status}): ${errorText}`)
+      },
+      onmessage(msg) {
+        if (msg.event === 'delta' || !msg.event) {
+          onMessage(msg.data)
+        } else if (msg.event === 'sources' && onSources) {
+          try {
+            onSources(JSON.parse(msg.data))
+          } catch (e) {
+            console.error('Failed to parse sources', e)
+          }
+        }
+      },
+      onclose() {
+        if (onClose) onClose()
+      },
+      onerror(err) {
+        if (onError) onError(err)
+        else throw err
+      }
     })
   },
 
