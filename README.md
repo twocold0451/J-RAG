@@ -40,8 +40,8 @@
 ### 1. Clone & Configure (克隆与配置)
 
 ```bash
-git clone https://github.com/your-username/jrag-enterprise.git
-cd jrag-enterprise
+git clone https://github.com/twocold0451/J-RAG.git
+cd J-RAG
 
 # Copy the environment file
 cp .env.example .env
@@ -72,20 +72,80 @@ Access the application (访问应用):
 
 ```mermaid
 graph TD
-    User[User / Web UI] -->|HTTP/SSE| API_Gateway[Spring Boot Backend]
-    
-    subgraph "RAG Engine"
-        API_Gateway -->|1. Rewrite| LLM_Rewrite[LLM (Query Rewrite)]
-        API_Gateway -->|2. Search| Hybrid_Search{Hybrid Search}
-        Hybrid_Search -->|Vector| PGVector[(PostgreSQL pgvector)]
-        Hybrid_Search -->|Keyword| PG_FullText[(PostgreSQL FullText)]
-        Hybrid_Search -->|3. Rerank| Rerank_Model[Rerank Model]
-        Rerank_Model -->|4. Generate| LLM_Chat[LLM (Chat)]
+    %% 样式定义
+    classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef api fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    classDef core fill:#fff3e0,stroke:#ef6c00,stroke-width:2px;
+    classDef storage fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+    classDef ai fill:#fce4ec,stroke:#c2185b,stroke-width:2px;
+
+    %% 1. 用户层
+    User([User / Web UI]) -->|HTTP/SSE| Controller
+    class User client
+
+    %% 2. API 层 (Spring Boot)
+    subgraph "API Layer"
+        Controller[Controllers]
+        Auth[Auth/RBAC]
     end
-    
+    class Controller,Auth api
+
+    %% 3. 核心业务层
+    subgraph "Core Services"
+        Ingestion[Ingestion Service]
+        Chat[Chat Service]
+        
+        subgraph "RAG Engine"
+            Rewrite["LLM Rewrite"]
+            Decompose["Query Decomposition"]
+            Search{Hybrid Search}
+            Rerank["Cross-Encoder Rerank"]
+            Agent["Deep Thinking Agent (ReAct)"]
+        end
+    end
+    class Ingestion,Chat,Rewrite,Decompose,Search,Rerank,Agent core
+
+    %% 4. 数据层
+    subgraph "Data Layer"
+        PG_Vec[("PostgreSQL<br>pgvector")]
+        MinIO[("File Storage")]
+    end
+    class PG_Vec,MinIO storage
+
+    %% 5. 外部 AI 服务
+    subgraph "Model Provider"
+        LLM_API["LLM API<br>(OpenAI/DeepSeek)"]
+        Embed_API["Embedding API"]
+    end
+    class LLM_API,Embed_API ai
+
+    %% 6. 可观测性
     subgraph "Observability"
-        API_Gateway -.->|Async Trace| LangFuse[LangFuse Server]
+        LangFuse[LangFuse]
     end
+    class LangFuse ai
+
+    %% --- 连线逻辑 ---
+    
+    %% 摄取流
+    Controller -->|Upload| Ingestion
+    Ingestion -->|Parse & Chunk| Embed_API
+    Embed_API -->|Vectors| PG_Vec
+    Ingestion -->|File| MinIO
+
+    %% 查询流
+    Controller -->|Query| Chat
+    Chat -->|1. History| Rewrite
+    Rewrite -->|2. Optimize| Decompose
+    Decompose -->|3. Sub-Queries| Search
+    Search -->|Vector| PG_Vec
+    Search -->|Keyword| PG_Vec
+    Search -->|4. Candidates| Rerank
+    Rerank -->|5. TopK| Agent
+    Agent <-->|Reasoning| LLM_API
+    
+    %% 监控流
+    Chat -.->|Trace| LangFuse
 ```
 
 ---
