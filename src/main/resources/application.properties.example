@@ -1,0 +1,152 @@
+# Application Version (Injected from Maven)
+app.version=@project.version@
+
+# File Upload Limits
+spring.servlet.multipart.max-file-size=50MB
+spring.servlet.multipart.max-request-size=50MB
+
+# ===================================================================
+# ACTUATOR CONFIGURATION
+# ===================================================================
+management.endpoints.web.exposure.include=health,info,loggers
+
+# ===================================================================
+# DEFAULT PROFILE
+# ===================================================================
+# 'dev' profile is active by default.
+# For production, override this with environment variable SPRING_PROFILES_ACTIVE=prod.
+spring.profiles.active=dev
+
+# ===================================================================
+# RAG Java Project Configuration
+# ===================================================================
+
+# ----------------------------------------
+# SERVER CONFIGURATION
+# ----------------------------------------
+server.port=8080
+
+# ----------------------------------------
+# DATABASE CONFIGURATION (PostgreSQL with pgvector)
+# ----------------------------------------
+# Using currentSchema=jrag_core for schema isolation.
+spring.datasource.url=${DB_URL:jdbc:postgresql://localhost:5432/jrag?currentSchema=jrag_core,public&characterEncoding=UTF-8}
+spring.datasource.username=${DB_USERNAME:postgres}
+spring.datasource.password=${DB_PASSWORD:your_password}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# HikariCP settings for cloud databases (Supabase/Render)
+# Prevents "connection closed" errors by refreshing connections more frequently
+spring.datasource.hikari.maximum-pool-size=5
+spring.datasource.hikari.minimum-idle=1
+spring.datasource.hikari.max-lifetime=300000
+spring.datasource.hikari.connection-timeout=20000
+spring.datasource.hikari.keepalive-time=120000
+
+# ----------------------------------------
+# FLYWAY DATABASE MIGRATION
+# ----------------------------------------
+spring.flyway.baseline-on-migrate=true
+spring.flyway.locations=classpath:db/migration
+# Flyway managed schema, created automatically if it doesn't exist.
+spring.flyway.schemas=jrag_core
+
+# ----------------------------------------
+# JPA / HIBERNATE CONFIGURATION
+# ----------------------------------------
+# Explicitly set the default schema for Hibernate.
+spring.jpa.properties.hibernate.default_schema=jrag_core
+
+# ===================================================================
+# AI PROVIDER CONFIGURATION (Centralized)
+# ===================================================================
+# Modify settings here to switch between different LLM providers.
+#
+# Common Provider Examples:
+# 1. OpenAI: https://api.openai.com/v1 | gpt-4o
+# 2. DeepSeek: https://api.deepseek.com | deepseek-chat
+# 3. Alibaba (DashScope): https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen-plus
+# 4. Ollama (Local): http://localhost:11434/v1 | llama3
+
+# --- Chat Model ---
+app.model.chat.base-url=${CHAT_MODEL_BASE_URL:https://api.openai.com/v1}
+app.model.chat.api-key=${CHAT_API_KEY:sk-xxxx}
+app.model.chat.model-name=${CHAT_MODEL_NAME:gpt-4o}
+
+# --- Embedding Model ---
+app.model.embedding.base-url=${EMBEDDING_MODEL_BASE_URL:https://api.openai.com/v1}
+app.model.embedding.api-key=${EMBEDDING_MODEL_API_KEY:sk-xxxx}
+app.model.embedding.model-name=${EMBEDDING_MODEL_NAME:text-embedding-3-small}
+
+# ===================================================================
+# LANGCHAIN4J INTEGRATION
+# ===================================================================
+# Uniformly references the global variables defined above.
+langchain4j.open-ai.chat-model.base-url=${app.model.chat.base-url}
+langchain4j.open-ai.chat-model.api-key=${app.model.chat.api-key}
+langchain4j.open-ai.chat-model.model-name=${app.model.chat.model-name}
+langchain4j.open-ai.chat-model.timeout=60s
+langchain4j.open-ai.chat-model.log-requests=false
+langchain4j.open-ai.chat-model.log-responses=false
+
+langchain4j.open-ai.streaming-chat-model.base-url=${app.model.chat.base-url}
+langchain4j.open-ai.streaming-chat-model.api-key=${app.model.chat.api-key}
+langchain4j.open-ai.streaming-chat-model.model-name=${app.model.chat.model-name}
+langchain4j.open-ai.streaming-chat-model.timeout=60s
+langchain4j.open-ai.streaming-chat-model.log-requests=false
+langchain4j.open-ai.streaming-chat-model.log-responses=false
+
+langchain4j.open-ai.embedding-model.base-url=${app.model.embedding.base-url}
+langchain4j.open-ai.embedding-model.api-key=${app.model.embedding.api-key}
+langchain4j.open-ai.embedding-model.model-name=${app.model.embedding.model-name}
+langchain4j.open-ai.embedding-model.timeout=60s
+# Detailed logs are disabled for production.
+langchain4j.open-ai.embedding-model.log-requests=false
+langchain4j.open-ai.embedding-model.log-responses=false
+
+# ===================================================================
+# RAG ENGINE CORE SETTINGS (Business Logic)
+# ===================================================================
+# Retrieval Settings
+app.rag.retrieval.top-k=5
+app.rag.retrieval.rewrite.enabled=true
+app.rag.retrieval.rewrite.max-context-messages=5
+
+# Reranking Configuration
+app.rag.retrieval.rerank.enabled=${RERANK_ENABLED:true}
+app.rag.retrieval.rerank.base-url=${RERANK_BASE_URL:https://api.jina.ai/v1/rerank}
+app.rag.retrieval.rerank.api-key=${RERANK_API_KEY:jina_xxxx}
+app.rag.retrieval.rerank.model-name=${RERANK_MODEL_NAME:jina-reranker-v3}
+app.rag.retrieval.rerank.initial-top-k=20
+
+# Chunking Configuration
+app.rag.chunking.size=1000
+app.rag.chunking.overlap=300
+
+# Vision Model Configuration
+app.rag.vision.enabled=${VISION_ENABLED:true}
+app.rag.vision.timeout-seconds=${VISION_TIMEOUT:60}
+app.rag.vision.base-url=${VISION_BASE_URL:${app.model.chat.base-url}}
+app.rag.vision.api-key=${VISION_API_KEY:${app.model.chat.api-key}}
+app.rag.vision.model-name=${VISION_MODEL_NAME:gpt-4-vision-preview}
+
+# ===================================================================
+# SECURITY & AUTHENTICATION
+# ===================================================================
+jwt.secret=${JWT_SECRET:your_jwt_secret_key_must_be_very_long_for_security}
+jwt.expiration=86400000
+
+# ===================================================================
+# OBSERVABILITY (Tracing & Monitoring)
+# ===================================================================
+# LangFuse Configuration
+app.rag.langfuse.enabled=${LANGFUSE_ENABLED:true}
+app.rag.langfuse.base-url=${LANGFUSE_BASE_URL:https://us.cloud.langfuse.com}
+app.rag.langfuse.public-key=${LANGFUSE_PUBLIC_KEY:pk-lf-xxxx}
+app.rag.langfuse.secret-key=${LANGFUSE_SECRET_KEY:sk-lf-xxxx}
+
+# ===================================================================
+# SYSTEM PERFORMANCE
+# ===================================================================
+# Enable Spring Boot Virtual Threads (Java 21+)
+spring.threads.virtual.enabled=true

@@ -13,6 +13,10 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/**
+ * 查询重写服务
+ * 负责根据对话历史对用户当前的查询进行补全和去噪，提升检索的准确性。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -55,6 +59,10 @@ public class QueryRewriteService {
 
     /**
      * 根据上下文智能重写查询，并进行搜索去噪优化
+     * 
+     * @param query 原始用户查询
+     * @param history 对话历史消息列表
+     * @return 优化后的搜索关键词
      */
     @Observed(name = "Query Rewrite")
     public String rewriteIfNecessary(String query, List<ChatMessage> history) {

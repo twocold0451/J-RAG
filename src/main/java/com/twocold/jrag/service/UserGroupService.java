@@ -22,7 +22,6 @@ public class UserGroupService {
 
     private final UserGroupRepository userGroupRepository;
     private final UserGroupMemberRepository userGroupMemberRepository;
-    private final TemplateRepository templateRepository; // To count templates if possible, or just ignore for now
 
     @Transactional(readOnly = true)
     public List<UserGroupDto> getAllGroups() {
@@ -34,15 +33,15 @@ public class UserGroupService {
     @Transactional
     public UserGroupDto createGroup(UserGroupCreateRequest request) {
         UserGroup group = new UserGroup();
-        group.setName(request.getName());
-        group.setDescription(request.getDescription());
+        group.setName(request.name());
+        group.setDescription(request.description());
         group.setCreatedAt(OffsetDateTime.now());
         group.setUpdatedAt(OffsetDateTime.now());
         
         UserGroup savedGroup = userGroupRepository.save(group);
         
-        if (request.getUserIds() != null && !request.getUserIds().isEmpty()) {
-            for (Long userId : request.getUserIds()) {
+        if (request.userIds() != null && !request.userIds().isEmpty()) {
+            for (Long userId : request.userIds()) {
                 UserGroupMember member = new UserGroupMember();
                 member.setGroupId(savedGroup.getId());
                 member.setUserId(userId);
@@ -59,16 +58,16 @@ public class UserGroupService {
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found"));
         
-        group.setName(request.getName());
-        group.setDescription(request.getDescription());
+        group.setName(request.name());
+        group.setDescription(request.description());
         group.setUpdatedAt(OffsetDateTime.now());
         UserGroup savedGroup = userGroupRepository.save(group);
         
         // Update members - simple strategy: delete all and re-add
         userGroupMemberRepository.deleteByGroupId(groupId);
         
-        if (request.getUserIds() != null) {
-            for (Long userId : request.getUserIds()) {
+        if (request.userIds() != null) {
+            for (Long userId : request.userIds()) {
                 UserGroupMember member = new UserGroupMember();
                 member.setGroupId(groupId);
                 member.setUserId(userId);

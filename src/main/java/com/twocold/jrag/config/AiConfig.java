@@ -1,7 +1,7 @@
 package com.twocold.jrag.config;
 
-import com.twocold.jrag.qa.DeepThinkingAgent;
-import com.twocold.jrag.qa.RagAgentTools;
+import com.twocold.jrag.agent.DeepThinkingAgent;
+import com.twocold.jrag.agent.RagAgentTools;
 import com.twocold.jrag.service.GenericScoringModel;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.scoring.ScoringModel;

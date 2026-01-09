@@ -2,12 +2,13 @@ package com.twocold.jrag.api;
 
 import com.twocold.jrag.api.dto.AdminUserCreateRequest;
 import com.twocold.jrag.api.dto.AdminUserResponse;
-import java.util.Map;
 import com.twocold.jrag.domain.User;
 import com.twocold.jrag.domain.UserGroupMember;
 import com.twocold.jrag.repository.UserGroupMemberRepository;
-import com.twocold.jrag.service.UserGroupService;
 import com.twocold.jrag.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,18 +16,25 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+/**
+ * 管理员控制器
+ * 提供用户管理、密码重置等管理员权限操作。
+ */
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
+@Tag(name = "管理员", description = "提供用户管理、密码重置等管理员权限操作。")
 public class AdminController {
 
     private final UserService userService;
     private final UserGroupMemberRepository userGroupMemberRepository;
 
+    @Operation(summary = "创建新用户")
     @PostMapping("/users")
     @Transactional
     public ResponseEntity<AdminUserResponse> createUser(@RequestBody AdminUserCreateRequest request) {
@@ -48,6 +56,7 @@ public class AdminController {
         return ResponseEntity.ok(response);
     }
 
+    @Operation(summary = "列出所有用户")
     @GetMapping("/users")
     public ResponseEntity<List<AdminUserResponse>> listUsers() {
         List<AdminUserResponse> responses = StreamSupport.stream(userService.findAll().spliterator(), false)
@@ -56,18 +65,16 @@ public class AdminController {
         return ResponseEntity.ok(responses);
     }
     
+    @Operation(summary = "更新用户信息")
     @PutMapping("/users/{userId}")
     @Transactional
-    public ResponseEntity<AdminUserResponse> updateUser(@PathVariable Long userId, @RequestBody AdminUserCreateRequest request) {
+    public ResponseEntity<AdminUserResponse> updateUser(
+            @Parameter(description = "用户 ID") @PathVariable Long userId,
+            @RequestBody AdminUserCreateRequest request) {
         User user = userService.updateUser(userId, request.getUsername(), request.getRole(), request.getEmail());
         
-        // Update groups
         if (request.getGroupIds() != null) {
-            // Remove all existing groups for this user (Wait, UserGroupService updates by group ID, here we update by User ID)
-            // I need a method to delete by User ID in Repo.
-            // Or fetch existing and diff.
-            // Let's assume we replace all.
-             List<UserGroupMember> existing = userGroupMemberRepository.findByUserId(userId);
+            List<UserGroupMember> existing = userGroupMemberRepository.findByUserId(userId);
              userGroupMemberRepository.deleteAll(existing);
              
              for (Long groupId : request.getGroupIds()) {
@@ -82,9 +89,10 @@ public class AdminController {
         return ResponseEntity.ok(mapToAdminResponse(user));
     }
 
+    @Operation(summary = "重置用户密码")
     @PostMapping("/users/{userId}/reset-password")
     @Transactional
-    public ResponseEntity<Map<String, String>> resetPassword(@PathVariable Long userId) {
+    public ResponseEntity<Map<String, String>> resetPassword(@Parameter(description = "用户 ID") @PathVariable Long userId) {
         String newPassword = userService.resetPasswordWithRandom(userId);
         return ResponseEntity.ok(Map.of("newPassword", newPassword));
     }
@@ -95,7 +103,6 @@ public class AdminController {
         response.setUsername(user.getUsername());
         response.setEmail(user.getEmail());
         response.setRole(user.getRole());
-        // response.setLastLoginAt(...) // Need to track login time in User entity if needed
         
         List<UserGroupMember> members = userGroupMemberRepository.findByUserId(user.getId());
         response.setGroupIds(members.stream().map(UserGroupMember::getGroupId).collect(Collectors.toList()));

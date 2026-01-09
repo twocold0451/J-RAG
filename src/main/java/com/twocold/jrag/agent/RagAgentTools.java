@@ -1,4 +1,4 @@
-package com.twocold.jrag.qa;
+package com.twocold.jrag.agent;
 
 import com.twocold.jrag.domain.Chunk;
 import com.twocold.jrag.service.QueryDecompositionService;
@@ -12,6 +12,10 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Agent 工具箱
+ * 提供给 DeepThinkingAgent 调用的具体能力（Function Calling）。
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -20,6 +24,13 @@ public class RagAgentTools {
     private final RetrievalService retrievalService;
     private final QueryDecompositionService decompositionService;
 
+    /**
+     * 工具：搜索知识库
+     * 根据关键词执行混合检索。
+     * 
+     * @param query 搜索关键词
+     * @return 检索到的相关文档片段
+     */
     @Tool("在知识库中搜索相关信息。当需要获取事实数据、文档内容或具体细节时使用此工具。")
     public String searchKnowledgeBase(String query) {
         // 只记录工具调用和查询长度，不输出具体内容以保护用户隐私
@@ -45,6 +56,13 @@ public class RagAgentTools {
         }
     }
 
+    /**
+     * 工具：拆解复杂查询
+     * 利用 LLM 将长难句拆解为简单句。
+     * 
+     * @param query 原始复杂问题
+     * @return 建议的子查询列表
+     */
     @Tool("将复杂问题拆解为多个简单的子查询。当用户问题包含多个部分、对比分析或逻辑复杂时使用。返回拆解后的子问题列表。")
     public String decomposeQuery(String query) {
         // 只记录工具调用和查询长度，不输出具体内容以保护用户隐私

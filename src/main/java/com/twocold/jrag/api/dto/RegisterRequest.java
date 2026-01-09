@@ -1,15 +1,15 @@
 package com.twocold.jrag.api.dto;
 
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
-@Setter
-@Getter
-@Data
-public class RegisterRequest {
-    private String username;
-    private String password;
-    private String email;
-
-}
+@Schema(description = "用户注册请求")
+public record RegisterRequest(
+    @Schema(description = "用户名", requiredMode = Schema.RequiredMode.REQUIRED)
+    String username,
+    
+    @Schema(description = "密码", requiredMode = Schema.RequiredMode.REQUIRED)
+    String password,
+    
+    @Schema(description = "电子邮箱")
+    String email
+) {}

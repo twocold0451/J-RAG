@@ -14,6 +14,10 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 查询分解服务
+ * 负责将复杂的提问拆解为多个简单的子查询，以便在 RAG 系统中获取更全面、精准的事实数据。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -22,7 +26,7 @@ public class QueryDecompositionService {
     private final ChatModel chatModel;
     private final ObjectMapper objectMapper;
 
-    // Regex to extract JSON array
+    // 正则表达式用于提取 JSON 数组
     private static final Pattern JSON_ARRAY_PATTERN = Pattern.compile("\\[.*?]", Pattern.DOTALL);
 
     private static final String DECOMPOSITION_PROMPT = """
@@ -50,6 +54,12 @@ public class QueryDecompositionService {
             JSON 输出:
             """;
 
+    /**
+     * 将复杂查询分解为子查询列表
+     * 
+     * @param query 原始用户查询
+     * @return 分解后的子查询列表
+     */
     @Observed(name = "Query Decomposition")
     public List<String> decompose(String query) {
         if (query == null || query.isBlank()) {

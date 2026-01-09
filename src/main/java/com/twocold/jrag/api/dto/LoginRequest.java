@@ -1,14 +1,12 @@
 package com.twocold.jrag.api.dto;
 
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
-@Setter
-@Getter
-@Data
-public class LoginRequest {
-    private String username;
-    private String password;
-
-}
+@Schema(description = "用户登录请求")
+public record LoginRequest(
+    @Schema(description = "用户名", requiredMode = Schema.RequiredMode.REQUIRED, example = "admin")
+    String username,
+    
+    @Schema(description = "密码", requiredMode = Schema.RequiredMode.REQUIRED, example = "123456")
+    String password
+) {}

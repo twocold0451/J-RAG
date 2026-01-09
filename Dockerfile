@@ -3,6 +3,10 @@ FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY pom.xml .
 COPY src ./src
+
+# 安全措施：强制使用 example 配置作为打包默认值，防止本地敏感配置泄露到镜像中
+RUN cp src/main/resources/application.properties.example src/main/resources/application.properties
+
 RUN mvn clean package -DskipTests
 
 # Stage 2: Run the application

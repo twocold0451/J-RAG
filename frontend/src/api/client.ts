@@ -97,7 +97,7 @@ export const api = {
     formData.append('isPublic', String(isPublic))
 
     const token = localStorage.getItem('token')
-    const response = await fetch(`${API_BASE}/upload`, {
+    const response = await fetch(`${API_BASE}/documents/upload`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
@@ -115,7 +115,7 @@ export const api = {
     request(`/documents/${id}`, { method: 'DELETE' }),
 
   ingestUrl: (data: IngestUrlRequest) =>
-    request<UploadResponse>('/ingest-url', {
+    request<UploadResponse>('/documents/ingest-url', {
       method: 'POST',
       body: data,
       params: data.category ? { category: data.category } : undefined,
@@ -136,7 +136,7 @@ export const api = {
 
   sendMessage: (conversationId: number, data: ChatRequest): Promise<ReadableStream> => {
     const token = localStorage.getItem('token')
-    return fetch(`${API_BASE}/conversations/${conversationId}/chat/stream`, {
+    return fetch(`${API_BASE}/chat/${conversationId}/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
