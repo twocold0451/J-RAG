@@ -33,3 +33,7 @@ CLAUDE.md
 /web/WEB-INF/web.xml
 /web/web/WEB-INF/web.xml
 /evaluation/*.csv
+/.settings/
+/.classpath
+/.factorypath
+/.project

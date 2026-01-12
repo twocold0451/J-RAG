@@ -24,6 +24,7 @@ public class QueryRewriteService {
 
     private final ChatModel chatModel;
     private final RagProperties ragProperties;
+    private final PromptService promptService;
 
     // 判断：包含这些代词、长度较短或包含常见搜索噪声词时，建议重写或优化
     private static final Pattern REWRITE_INDICATORS = Pattern.compile(
@@ -31,7 +32,7 @@ public class QueryRewriteService {
             Pattern.CASE_INSENSITIVE
     );
 
-    private static final String REWRITE_PROMPT = """
+    private static final String DEFAULT_REWRITE_PROMPT = """
             分析用户当前的问题，并结合对话历史（如果有）进行处理。
             
             任务：
@@ -84,7 +85,8 @@ public class QueryRewriteService {
                         .map(msg -> String.format("%s: %s", msg.getRole(), msg.getContent()))
                         .collect(Collectors.joining("\n"));
 
-            String prompt = String.format(REWRITE_PROMPT, historyContext, query);
+            String template = promptService.getPrompt("query_rewrite", DEFAULT_REWRITE_PROMPT);
+            String prompt = String.format(template, historyContext, query);
             
             TraceContext.setNextGenerationName("LLM: Query Rewrite");
             String processedQuery = chatModel.chat(prompt).trim();

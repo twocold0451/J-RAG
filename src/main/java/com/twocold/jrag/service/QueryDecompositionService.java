@@ -25,11 +25,12 @@ public class QueryDecompositionService {
 
     private final ChatModel chatModel;
     private final ObjectMapper objectMapper;
+    private final PromptService promptService;
 
     // 正则表达式用于提取 JSON 数组
     private static final Pattern JSON_ARRAY_PATTERN = Pattern.compile("\\[.*?]", Pattern.DOTALL);
 
-    private static final String DECOMPOSITION_PROMPT = """
+    private static final String DEFAULT_DECOMPOSITION_PROMPT = """
             你是一位查询分析专家。请将用户复杂的提问拆解为简单、独立的子查询，以便于在 RAG 系统中进行检索。
             
             原始问题: %s
@@ -71,7 +72,8 @@ public class QueryDecompositionService {
         }
 
         try {
-            String prompt = String.format(DECOMPOSITION_PROMPT, query);
+            String template = promptService.getPrompt("query_decomposition", DEFAULT_DECOMPOSITION_PROMPT);
+            String prompt = String.format(template, query);
             
             TraceContext.setNextGenerationName("LLM: Query Decomposition");
             String response = chatModel.chat(prompt).trim();
