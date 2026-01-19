@@ -1,7 +1,6 @@
 package com.twocold.jrag.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.twocold.jrag.agent.AgentContext;
 import com.twocold.jrag.agent.DeepThinkingAgent;
 import com.twocold.jrag.agent.RagAgentTools;
 import com.twocold.jrag.config.Observed;
@@ -27,11 +26,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -279,7 +279,7 @@ public class ChatService {
             agentMessages.add(UserMessage.from(userMessageContent));
 
             // 构建请求级工具实例，注入 Sink
-            RagAgentTools requestScopedTools = new RagAgentTools(retrievalService, queryDecompositionService, sink, associatedDocumentIds);
+            RagAgentTools requestScopedTools = new RagAgentTools(retrievalService, queryDecompositionService, sink, associatedDocumentIds, objectMapper);
             
             // 构建请求级 Agent 实例
             DeepThinkingAgent requestScopedAgent = AiServices.builder(DeepThinkingAgent.class)
@@ -287,7 +287,12 @@ public class ChatService {
                     .tools(requestScopedTools)
                     .build();
             
-            Flux<String> tokenFlux = requestScopedAgent.chat(agentMessages);
+            Flux<String> tokenFlux = requestScopedAgent.chat(agentMessages)
+                .timeout(Duration.ofSeconds(60))
+                .onErrorResume(TimeoutException.class, e -> {
+                    log.warn("DeepThinkingAgent 执行超时");
+                    return Flux.just("抱歉，思考过程超时，请尝试简化问题或提供更多上下文。");
+                });
             StringBuilder fullAnswer = new StringBuilder();
 
             tokenFlux.subscribe(

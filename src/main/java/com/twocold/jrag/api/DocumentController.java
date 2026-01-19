@@ -72,7 +72,7 @@ public class DocumentController {
             UUID documentId = document.getId();
 
             // 2. 将上传内容保存到临时文件
-            tempFilePath = Files.createTempFile("upload-", file.getOriginalFilename());
+            tempFilePath = Files.createTempFile("upload-", "-"+file.getOriginalFilename());
             file.transferTo(tempFilePath.toFile());
             log.info("已为文档 {} 保存临时文件: {}", documentId, tempFilePath);
 
