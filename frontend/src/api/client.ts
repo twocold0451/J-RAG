@@ -21,6 +21,8 @@ const API_BASE = (import.meta.env?.VITE_API_BASE_URL as string) || '/api'
 interface StreamChatCallbacks {
   onMessage: (data: string) => void
   onSources?: (sources: any[]) => void
+  onStatus?: (status: { stage: string; message: string }) => void
+  onThought?: (thought: string) => void
   onError?: (error: Error) => void
   onClose?: () => void
 }
@@ -167,7 +169,7 @@ export const api = {
     signal?: AbortSignal
   ) => {
     const token = localStorage.getItem('token')
-    const { onMessage, onSources, onError, onClose } = callbacks
+    const { onMessage, onSources, onStatus, onThought, onError, onClose } = callbacks
 
     await fetchEventSource(`${API_BASE}/chat/${conversationId}/stream`, {
       method: 'POST',
@@ -184,7 +186,8 @@ export const api = {
         throw new Error(`Server Error (${response.status}): ${errorText}`)
       },
       onmessage(msg) {
-        if (msg.event === 'delta' || !msg.event) {
+        // console.log('SSE Event:', msg.event, msg.data)
+        if (msg.event === 'delta' || msg.event === 'message' || !msg.event) {
           onMessage(msg.data)
         } else if (msg.event === 'sources' && onSources) {
           try {
@@ -192,6 +195,18 @@ export const api = {
           } catch (e) {
             console.error('Failed to parse sources', e)
           }
+        } else if (msg.event === 'status' && onStatus) {
+          try {
+            onStatus(JSON.parse(msg.data))
+          } catch (e) {
+            console.error('Failed to parse status', e)
+          }
+        } else if (msg.event === 'thought' && onThought) {
+          console.log('Received thought:', msg.data)
+          onThought(msg.data)
+        } else if (msg.event === 'error') {
+          console.error('Received error event:', msg.data)
+          if (onError) onError(new Error(msg.data))
         }
       },
       onclose() {

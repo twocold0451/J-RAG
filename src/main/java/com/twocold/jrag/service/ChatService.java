@@ -3,6 +3,7 @@ package com.twocold.jrag.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.twocold.jrag.agent.AgentContext;
 import com.twocold.jrag.agent.DeepThinkingAgent;
+import com.twocold.jrag.agent.RagAgentTools;
 import com.twocold.jrag.config.Observed;
 import com.twocold.jrag.config.RagProperties;
 import com.twocold.jrag.config.TraceContext;
@@ -17,12 +18,17 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import dev.langchain4j.service.AiServices;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -48,193 +54,197 @@ public class ChatService {
     private final QueryDecompositionService queryDecompositionService;
     private final LangFuseService langFuseService;
     private final RagProperties ragProperties;
-    private final DeepThinkingAgent deepThinkingAgent;
+    // private final DeepThinkingAgent deepThinkingAgent; // Removed: Per-request instantiation
     private final PromptService promptService;
     private final ObjectMapper objectMapper;
 
     /**
      * 执行流式 RAG 对话
-     * 
+     *
      * @param conversationId 对话 ID
      * @param userId 用户 ID
      * @param userMessageContent 用户提问内容
      * @param useDeepThinking 是否启用深度思考（Agent）模式
-     * @param emitter SSE 发送器
+     * @return SSE 事件流
      */
     @Transactional
     @Observed(name = "Chat Interaction", includeInputFields = {"conversationId", "userId", "userMessageContent"})
-    public void streamChat(Long conversationId, Long userId, String userMessageContent, boolean useDeepThinking, SseEmitter emitter) {
-        // 获取由 Aspect 生成的 Trace ID 用于全链路追踪
-        String traceId = TraceContext.getTraceId();
+    public Flux<ServerSentEvent<String>> streamChat(Long conversationId, Long userId, String userMessageContent, boolean useDeepThinking) {
+        return Flux.<ServerSentEvent<String>>create(sink -> {
+            // 获取由 Aspect 生成的 Trace ID 用于全链路追踪
+            String traceId = TraceContext.getTraceId();
 
-        try {
-            // 在 LangFuse 中注册 Trace
-            langFuseService.createTrace(traceId, "Chat Interaction", userId.toString(), Map.of("conversationId", conversationId));
+            try {
+                // 在 LangFuse 中注册 Trace
+                langFuseService.createTrace(traceId, "Chat Interaction", userId.toString(), Map.of("conversationId", conversationId));
 
-            Conversation conversation = conversationRepository.findById(conversationId)
-                    .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
+                Conversation conversation = conversationRepository.findById(conversationId)
+                        .orElseThrow(() -> new IllegalArgumentException("未找到对话"));
 
-            if (!conversation.getUserId().equals(userId)) {
-                throw new SecurityException("无权访问该对话");
-            }
-
-            // 加载历史记录用于查询重写
-            int maxRewriteContext = (ragProperties.retrieval().rewrite() != null && ragProperties.retrieval().rewrite().enabled())
-                    ? ragProperties.retrieval().rewrite().maxContextMessages()
-                    : 0;
-            int maxHistoryLimit = Math.max(MAX_CONTEXT_MESSAGES, maxRewriteContext);
-            List<ChatMessage> latestMessages = chatMessageRepository.findLatestMessagesByConversationId(conversationId, maxHistoryLimit);
-
-            // 幂等性检查：防止重复提交
-            ChatMessage existingUserMsg = null;
-            int idempotencyLimit = Math.min(latestMessages.size(), 10);
-            for (int i = 0; i < idempotencyLimit; i++) {
-                ChatMessage msg = latestMessages.get(i);
-                if ("USER".equals(msg.getRole())
-                        && msg.getContent().equals(userMessageContent)
-                        && msg.getCreatedAt().isAfter(LocalDateTime.now().minusSeconds(30))) {
-                    existingUserMsg = msg;
-                    break;
+                if (!conversation.getUserId().equals(userId)) {
+                    throw new SecurityException("无权访问该对话");
                 }
-            }
 
-            if (existingUserMsg != null) {
-                int index = latestMessages.indexOf(existingUserMsg);
-                if (index > 0) {
-                    ChatMessage potentialAiReply = latestMessages.get(index - 1);
-                    if ("ASSISTANT".equals(potentialAiReply.getRole())) {
-                        try {
-                            emitter.send(potentialAiReply.getContent(), org.springframework.http.MediaType.TEXT_PLAIN);
-                            emitter.complete();
-                        } catch (Exception e) {
-                            emitter.completeWithError(e);
+                // 加载历史记录用于查询重写
+                int maxRewriteContext = (ragProperties.retrieval().rewrite() != null && ragProperties.retrieval().rewrite().enabled())
+                        ? ragProperties.retrieval().rewrite().maxContextMessages()
+                        : 0;
+                int maxHistoryLimit = Math.max(MAX_CONTEXT_MESSAGES, maxRewriteContext);
+                List<ChatMessage> latestMessages = chatMessageRepository.findLatestMessagesByConversationId(conversationId, maxHistoryLimit);
+
+                // 幂等性检查：防止重复提交
+                ChatMessage existingUserMsg = null;
+                int idempotencyLimit = Math.min(latestMessages.size(), 10);
+                for (int i = 0; i < idempotencyLimit; i++) {
+                    ChatMessage msg = latestMessages.get(i);
+                    if ("USER".equals(msg.getRole())
+                            && msg.getContent().equals(userMessageContent)
+                            && msg.getCreatedAt().isAfter(LocalDateTime.now().minusSeconds(30))) {
+                        existingUserMsg = msg;
+                        break;
+                    }
+                }
+
+                if (existingUserMsg != null) {
+                    int index = latestMessages.indexOf(existingUserMsg);
+                    if (index > 0) {
+                        ChatMessage potentialAiReply = latestMessages.get(index - 1);
+                        if ("ASSISTANT".equals(potentialAiReply.getRole())) {
+                            sink.next(ServerSentEvent.builder(potentialAiReply.getContent()).build());
+                            sink.complete();
+                            return;
                         }
-                        return;
+                    }
+                } else {
+                    // 保存用户消息
+                    ChatMessage userChatMessage = new ChatMessage();
+                    userChatMessage.setConversationId(conversationId);
+                    userChatMessage.setRole("USER");
+                    userChatMessage.setContent(userMessageContent);
+                    userChatMessage.setCreatedAt(LocalDateTime.now());
+                    chatMessageRepository.save(userChatMessage);
+                }
+
+                // 获取对话关联的文档范围
+                Long parentId = conversation.getParentId();
+                Long effectiveParentId = parentId != null ? parentId : conversationId;
+                List<UUID> associatedDocumentIds = jdbcTemplate.queryForList(
+                        "SELECT DISTINCT document_id FROM conversation_documents WHERE conversation_id = ? OR conversation_id = ?",
+                        UUID.class, conversationId, effectiveParentId);
+
+                // --- 分支：深度思考模式 (Agentic RAG) ---
+                if (useDeepThinking) {
+                    handleDeepThinking(conversationId, userMessageContent, associatedDocumentIds, latestMessages, conversation, sink);
+                    return;
+                }
+
+                // --- 分支：标准 RAG 模式 ---
+                List<ChatMessage> chronologicalHistory = null;
+                if (maxRewriteContext > 0 && !associatedDocumentIds.isEmpty() && !latestMessages.isEmpty()) {
+                    chronologicalHistory = latestMessages.stream()
+                            .limit(maxRewriteContext)
+                            .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
+                            .collect(Collectors.toList());
+                }
+
+                List<String> relevantTextSegments = new ArrayList<>();
+                List<Map<String, Object>> sources = new ArrayList<>();
+                String finalRewrittenQuery = null;
+
+                if (!associatedDocumentIds.isEmpty()) {
+                    String searchKeyword = userMessageContent;
+
+                    // 1. 查询重写：基于历史上下文优化检索词
+                    if (maxRewriteContext > 0) {
+                        List<ChatMessage> historyToPass = chronologicalHistory != null ? chronologicalHistory : new ArrayList<>();
+                        searchKeyword = queryRewriteService.rewriteIfNecessary(userMessageContent, historyToPass);
+                    }
+                    finalRewrittenQuery = searchKeyword;
+
+                    // 2. 查询分解：将复杂问题拆解为多个子查询
+                    List<String> subQueries = queryDecompositionService.decompose(searchKeyword);
+
+                    // 3. 批量混合搜索：执行并汇总所有子查询的检索结果
+                    List<Chunk> nearestChunks = retrievalService.batchHybridSearch(subQueries, associatedDocumentIds);
+
+                    for (Chunk chunk : nearestChunks) {
+                        relevantTextSegments.add(chunk.getContent());
+                        sources.add(extractSourceInfo(chunk));
+                    }
+
+                    // 发送引用源事件给前端
+                    if (!sources.isEmpty()) {
+                        sink.next(ServerSentEvent.<String>builder()
+                                .event("sources")
+                                .data(objectMapper.writeValueAsString(sources))
+                                .build());
                     }
                 }
-            } else {
-                // 保存用户消息
-                ChatMessage userChatMessage = new ChatMessage();
-                userChatMessage.setConversationId(conversationId);
-                userChatMessage.setRole("USER");
-                userChatMessage.setContent(userMessageContent);
-                userChatMessage.setCreatedAt(LocalDateTime.now());
-                chatMessageRepository.save(userChatMessage);
-            }
 
-            // 获取对话关联的文档范围
-            Long parentId = conversation.getParentId();
-            Long effectiveParentId = parentId != null ? parentId : conversationId;
-            List<UUID> associatedDocumentIds = jdbcTemplate.queryForList(
-                    "SELECT DISTINCT document_id FROM conversation_documents WHERE conversation_id = ? OR conversation_id = ?",
-                    UUID.class, conversationId, effectiveParentId);
+                final String sourcesJsonToSave = (!sources.isEmpty()) ? convertToJsonSilently(objectMapper, sources) : null;
+                final String capturedRewrittenQuery = finalRewrittenQuery;
 
-            // --- 分支：深度思考模式 (Agentic RAG) ---
-            if (useDeepThinking) {
-                handleDeepThinking(conversationId, userMessageContent, associatedDocumentIds, latestMessages, conversation, emitter);
-                return;
-            }
+                // 获取标准 RAG 系统提示词
+                String standardRagSystemPrompt = promptService.getPrompt("standard_rag", """
+                        你是一个专业的智能助手，专门负责基于提供的上下文信息回答用户问题。
 
-            // --- 分支：标准 RAG 模式 ---
-            List<ChatMessage> chronologicalHistory = null;
-            if (maxRewriteContext > 0 && !associatedDocumentIds.isEmpty() && !latestMessages.isEmpty()) {
-                chronologicalHistory = latestMessages.stream()
-                        .limit(maxRewriteContext)
-                        .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
-                        .collect(Collectors.toList());
-            }
+                        ## 核心原则
+                        1. **基于事实回答**：严格基于提供的上下文信息回答问题，不添加外部知识
+                        2. **准确引用**：在回答中明确引用上下文中的相关信息和来源
+                        3. **信息完整性**：如果上下文信息不足以完全回答问题，请明确指出信息不足的部分
+                        4. **逻辑清晰**：回答结构清晰，逻辑连贯，便于理解
 
-            List<String> relevantTextSegments = new ArrayList<>();
-            List<Map<String, Object>> sources = new ArrayList<>();
-            String finalRewrittenQuery = null;
+                        ## 回答要求
+                        - 使用简洁明了的中文表达
+                        - 优先使用上下文中的专业术语和概念
+                        - 如果涉及多个相关信息点，请进行适当归纳整理
+                        - 保持客观中立的态度，避免主观判断
 
-            if (!associatedDocumentIds.isEmpty()) {
-                String searchKeyword = userMessageContent;
+                        ## 特殊情况处理
+                        - 如果问题与上下文完全无关，礼貌说明无法基于提供的信息回答
+                        - 如果上下文包含矛盾信息，指出存在差异并解释可能原因
+                        - 对于需要计算或推导的问题，如果上下文提供足够数据则进行，否则说明数据不足
 
-                // 1. 查询重写：基于历史上下文优化检索词
-                if (maxRewriteContext > 0) {
-                    List<ChatMessage> historyToPass = chronologicalHistory != null ? chronologicalHistory : new ArrayList<>();
-                    searchKeyword = queryRewriteService.rewriteIfNecessary(userMessageContent, historyToPass);
-                }
-                finalRewrittenQuery = searchKeyword;
+                        请始终记住：你的回答必须完全基于提供的上下文信息，不能依赖预训练知识或外部信息。
+                        """);
 
-                // 2. 查询分解：将复杂问题拆解为多个子查询
-                List<String> subQueries = queryDecompositionService.decompose(searchKeyword);
+                // 构建对话上下文
+                List<dev.langchain4j.data.message.ChatMessage> messages = buildPromptMessages(latestMessages, relevantTextSegments, userMessageContent, standardRagSystemPrompt);
 
-                // 3. 批量混合搜索：执行并汇总所有子查询的检索结果
-                List<Chunk> nearestChunks = retrievalService.batchHybridSearch(subQueries, associatedDocumentIds);
-
-                for (Chunk chunk : nearestChunks) {
-                    relevantTextSegments.add(chunk.getContent());
-                    sources.add(extractSourceInfo(chunk));
-                }
-
-                // 发送引用源事件给前端
-                if (!sources.isEmpty()) {
-                    emitter.send(SseEmitter.event().name("sources").data(objectMapper.writeValueAsString(sources)));
-                }
-            }
-
-            final String sourcesJsonToSave = (!sources.isEmpty()) ? convertToJsonSilently(objectMapper, sources) : null;
-            final String capturedRewrittenQuery = finalRewrittenQuery;
-
-            // 获取标准 RAG 系统提示词
-            String standardRagSystemPrompt = promptService.getPrompt("standard_rag", """
-                    你是一个专业的智能助手，专门负责基于提供的上下文信息回答用户问题。
-
-                    ## 核心原则
-                    1. **基于事实回答**：严格基于提供的上下文信息回答问题，不添加外部知识
-                    2. **准确引用**：在回答中明确引用上下文中的相关信息和来源
-                    3. **信息完整性**：如果上下文信息不足以完全回答问题，请明确指出信息不足的部分
-                    4. **逻辑清晰**：回答结构清晰，逻辑连贯，便于理解
-
-                    ## 回答要求
-                    - 使用简洁明了的中文表达
-                    - 优先使用上下文中的专业术语和概念
-                    - 如果涉及多个相关信息点，请进行适当归纳整理
-                    - 保持客观中立的态度，避免主观判断
-
-                    ## 特殊情况处理
-                    - 如果问题与上下文完全无关，礼貌说明无法基于提供的信息回答
-                    - 如果上下文包含矛盾信息，指出存在差异并解释可能原因
-                    - 对于需要计算或推导的问题，如果上下文提供足够数据则进行，否则说明数据不足
-
-                    请始终记住：你的回答必须完全基于提供的上下文信息，不能依赖预训练知识或外部信息。
-                    """);
-
-            // 构建对话上下文
-            List<dev.langchain4j.data.message.ChatMessage> messages = buildPromptMessages(latestMessages, relevantTextSegments, userMessageContent, standardRagSystemPrompt);
-
-            TraceContext.setNextGenerationName("LLM: Final Generation");
-            openAiStreamingChatModel.chat(messages, new StreamingChatResponseHandler() {
-                @Override
-                public void onPartialResponse(String token) {
-                    try {
-                        emitter.send(SseEmitter.event().name("delta").data(token));
-                    } catch (Exception e) {
-                        emitter.completeWithError(e);
+                TraceContext.setNextGenerationName("LLM: Final Generation");
+                openAiStreamingChatModel.chat(messages, new StreamingChatResponseHandler() {
+                    @Override
+                    public void onPartialResponse(String token) {
+                        sink.next(ServerSentEvent.<String>builder()
+                                .event("message")
+                                .data(token)
+                                .build());
                     }
-                }
-                @Override
-                public void onCompleteResponse(ChatResponse response) {
-                    handleChatCompletion(conversationId, userMessageContent, capturedRewrittenQuery, sourcesJsonToSave, traceId, response, conversation, emitter);
-                }
-                @Override
-                public void onError(Throwable error) {
-                    emitter.completeWithError(error);
-                }
-            });
+                    @Override
+                    public void onCompleteResponse(ChatResponse response) {
+                        handleChatCompletion(conversationId, userMessageContent, capturedRewrittenQuery, sourcesJsonToSave, traceId, response, conversation, sink);
+                    }
+                    @Override
+                    public void onError(Throwable error) {
+                        sink.error(error);
+                    }
+                });
 
-        } catch (Exception e) {
-            log.error("streamChat 处理失败", e);
-            emitter.completeWithError(e);
-        } finally {
-            TraceContext.clear();
-        }
+            } catch (Exception e) {
+                log.error("streamChat 处理失败", e);
+                sink.next(ServerSentEvent.<String>builder()
+                        .event("error")
+                        .data("处理您的请求时遇到错误: " + e.getMessage())
+                        .build());
+                sink.error(e);
+            } finally {
+                TraceContext.clear();
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private void handleDeepThinking(Long conversationId, String userMessageContent, List<UUID> associatedDocumentIds,
-                                    List<ChatMessage> latestMessages, Conversation conversation, SseEmitter emitter) throws Exception {
+                                    List<ChatMessage> latestMessages, Conversation conversation, FluxSink<ServerSentEvent<String>> sink) throws Exception {
         log.info("启动深度思考模式处理会话: {}", conversationId);
         try {
             List<dev.langchain4j.data.message.ChatMessage> agentMessages = new ArrayList<>();
@@ -268,21 +278,45 @@ public class ChatService {
                     });
             agentMessages.add(UserMessage.from(userMessageContent));
 
-            AgentContext.setDocumentIds(associatedDocumentIds);
-            String answer = deepThinkingAgent.chat(agentMessages);
+            // 构建请求级工具实例，注入 Sink
+            RagAgentTools requestScopedTools = new RagAgentTools(retrievalService, queryDecompositionService, sink, associatedDocumentIds);
+            
+            // 构建请求级 Agent 实例
+            DeepThinkingAgent requestScopedAgent = AiServices.builder(DeepThinkingAgent.class)
+                    .streamingChatModel(openAiStreamingChatModel)
+                    .tools(requestScopedTools)
+                    .build();
+            
+            Flux<String> tokenFlux = requestScopedAgent.chat(agentMessages);
+            StringBuilder fullAnswer = new StringBuilder();
 
-            emitter.send(SseEmitter.event().name("delta").data(answer));
+            tokenFlux.subscribe(
+                token -> {
+                    fullAnswer.append(token);
+                    sink.next(ServerSentEvent.<String>builder()
+                            .event("message")
+                            .data(token)
+                            .build());
+                },
+                error -> {
+                    log.error("深度思考模式流处理失败", error);
+                    sink.next(ServerSentEvent.<String>builder()
+                            .event("message")
+                            .data("抱歉，深度思考模式遇到问题: " + error.getMessage())
+                            .build());
+                    sink.error(error);
+                },
+                () -> {
+                    String finalAnswer = fullAnswer.toString();
+                    saveAiMessage(conversationId, finalAnswer, null);
+                    updateConversationTime(conversation);
+                    sink.complete();
+                }
+            );
 
-            // 保存 AI 响应
-            saveAiMessage(conversationId, answer, null);
-            updateConversationTime(conversation);
-            emitter.complete();
         } catch (Exception e) {
-            log.error("深度思考模式处理失败", e);
-            emitter.send(SseEmitter.event().name("delta").data("抱歉，深度思考模式遇到问题: " + e.getMessage()));
-            emitter.completeWithError(e);
-        } finally {
-            AgentContext.clear();
+            log.error("深度思考模式启动失败", e);
+            sink.error(e);
         }
     }
 
@@ -321,15 +355,16 @@ public class ChatService {
     }
 
     private void handleChatCompletion(Long conversationId, String userQuery, String rewrittenQuery, String sourcesJson, 
-                                      String traceId, ChatResponse response, Conversation conversation, SseEmitter emitter) {
+                                      String traceId, ChatResponse response, Conversation conversation, FluxSink<ServerSentEvent<String>> sink) {
         try {
             String aiResponseText = response.aiMessage().text();
             saveAiMessage(conversationId, aiResponseText, sourcesJson);
             saveRagInteraction(traceId, conversationId, conversation.getUserId(), userQuery, rewrittenQuery, aiResponseText, sourcesJson);
             updateConversationTime(conversation);
-            emitter.complete();
+            sink.complete();
         } catch (Exception e) {
             log.error("保存 RAG 交互日志失败", e);
+            sink.error(e);
         }
     }
 

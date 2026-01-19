@@ -1,14 +1,13 @@
 package com.twocold.jrag.config;
 
-import com.twocold.jrag.agent.DeepThinkingAgent;
-import com.twocold.jrag.agent.RagAgentTools;
 import com.twocold.jrag.service.GenericScoringModel;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.scoring.ScoringModel;
-import dev.langchain4j.service.AiServices;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
+
+// Keep import if needed elsewhere, otherwise remove. But remove unused imports is better.
+
 
 @Configuration
 public class AiConfig {
@@ -23,13 +22,5 @@ public class AiConfig {
             return null;
         }
         return new GenericScoringModel(config, builder);
-    }
-
-    @Bean
-    public DeepThinkingAgent deepThinkingAgent(ChatModel chatModel, RagAgentTools ragAgentTools) {
-        return AiServices.builder(DeepThinkingAgent.class)
-                .chatModel(chatModel)
-                .tools(ragAgentTools)
-                .build();
     }
 }

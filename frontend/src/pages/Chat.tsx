@@ -41,6 +41,10 @@ interface Message {
   content: string
   timestamp: string
   sources?: DisplaySource[]
+  status?: string
+  stage?: string
+  thoughts?: string[]
+  isStreaming?: boolean
 }
 
 interface Conversation extends ConversationResponse {
@@ -59,8 +63,9 @@ export default function Chat() {
   const [isNewChatOpen, setIsNewChatOpen] = useState(false)
   const [newChatTitle, setNewChatTitle] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
-  const [isDeepThinking, setIsDeepThinking] = useState(false)
+  const [isDeepThinking] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Delete Confirmation State
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -111,7 +116,7 @@ export default function Chat() {
     }
   }, [])
 
-  useEffect(() => {
+   useEffect(() => {
     scrollToBottom()
   }, [messages])
 
@@ -141,23 +146,21 @@ export default function Chat() {
 
     setMessages(prev => [...prev, userMessage])
     setInputMessage('')
+
+    // 添加空的 AI 消息用于流式更新
+    const placeholderMessage: Message = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      isStreaming: true,
+    }
+    setMessages(prev => [...prev, placeholderMessage])
+
     setIsLoading(true)
 
-    // 检查是否已经有助手消息（欢迎消息），用于更新而不是添加新的
-    const hasWelcomeMessage = messages[messages.length - 1]?.content?.includes('已为您创建')
-
-    if (!hasWelcomeMessage) {
-      // 添加空的 AI 消息用于流式更新
-      const placeholderMessage: Message = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: '',
-        timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-      }
-      setMessages(prev => [...prev, placeholderMessage])
-    }
-
     const ctrl = new AbortController()
+    abortControllerRef.current = ctrl
 
     try {
       await api.streamChat(
@@ -167,14 +170,45 @@ export default function Chat() {
           useDeepThinking: isDeepThinking
         },
         {
-          onMessage: (textDelta) => {
+           onStatus: (statusData: { stage: string; message: string }) => {
             setMessages(prev => {
               const lastMsg = prev[prev.length - 1]
-              if (lastMsg && lastMsg.role === 'assistant') {
+              if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
                 const updated = [...prev]
                 updated[updated.length - 1] = {
                   ...lastMsg,
-                  content: lastMsg.content + textDelta
+                  stage: statusData.stage,
+                  status: statusData.message
+                }
+                return updated
+              }
+              return prev
+            })
+          },
+          onThought: (thought: string) => {
+            setMessages(prev => {
+              const lastMsg = prev[prev.length - 1]
+              if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+                const updated = [...prev]
+                updated[updated.length - 1] = {
+                  ...lastMsg,
+                  thoughts: [...(lastMsg.thoughts || []), thought]
+                }
+                return updated
+              }
+              return prev
+            })
+          },
+           onMessage: (textDelta) => {
+            setMessages(prev => {
+              const lastMsg = prev[prev.length - 1]
+              if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+                const updated = [...prev]
+                const hasContent = lastMsg.content.length > 0
+                updated[updated.length - 1] = {
+                  ...lastMsg,
+                  content: lastMsg.content + textDelta,
+                  status: hasContent ? '' : lastMsg.status
                 }
                 return updated
               } else {
@@ -182,7 +216,8 @@ export default function Chat() {
                   id: Date.now(),
                   role: 'assistant',
                   content: textDelta,
-                  timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+                  timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+                  isStreaming: true
                 }]
               }
             })
@@ -195,10 +230,10 @@ export default function Chat() {
             const uniqueSources = displaySources.filter((item, index, self) =>
               index === self.findIndex(s => s.fileName === item.fileName && s.page === item.page)
             ).slice(0, 5)
-            
+
             setMessages(prev => {
               const lastMsg = prev[prev.length - 1]
-              if (lastMsg && lastMsg.role === 'assistant') {
+              if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
                 const updated = [...prev]
                 updated[updated.length - 1] = {
                   ...lastMsg,
@@ -210,9 +245,14 @@ export default function Chat() {
             })
           },
           onClose: () => {
-            ctrl.abort()
+            abortControllerRef.current = null
+            // 流式传输结束，移除流式标记
+            setMessages(prev => prev.map(msg =>
+              msg.isStreaming ? { ...msg, isStreaming: false } : msg
+            ))
           },
           onError: (err) => {
+            abortControllerRef.current = null
             if (ctrl.signal.aborted) return
             console.error('SSE Error:', err)
             ctrl.abort()
@@ -221,27 +261,41 @@ export default function Chat() {
         },
         ctrl.signal
       )
-    } catch (err: any) {
-      // 忽略主动中止引发的错误
-      if (err.name === 'AbortError') {
-        return
-      }
-      // 检查是否已经有 AI 回复（部分成功）
-      setMessages(prev => {
-        const lastMsg = prev[prev.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content) {
-          return prev
+      } catch (err: any) {
+        abortControllerRef.current = null
+        // 移除所有流式标记
+        setMessages(prev => prev.map(msg =>
+          msg.isStreaming ? { ...msg, isStreaming: false } : msg
+        ))
+
+        // 忽略主动中止引发的错误
+        if (err.name === 'AbortError') {
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1]
+            if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content && lastMsg.thoughts?.length === 0) {
+              return prev.slice(0, -1)
+            }
+            return prev
+          })
+          return
         }
-        return [...prev.slice(0, -1), {
-          id: Date.now() + 1,
-          role: 'assistant',
-          content: `错误: ${err.message || '连接已中断'}`,
-          timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-        }]
-      })
-    } finally {
-      setIsLoading(false)
-    }
+        // 检查是否已经有 AI 回复（部分成功）
+        setMessages(prev => {
+          const lastMsg = prev[prev.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content) {
+            return prev
+          }
+          return [...prev.slice(0, -1), {
+            id: Date.now() + 1,
+            role: 'assistant',
+            content: `错误: ${err.message || '连接已中断'}`,
+            timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          }]
+        })
+      } finally {
+        setIsLoading(false)
+        abortControllerRef.current = null
+      }
   }
 
   const handleCreateConversationAndSend = async () => {
@@ -442,15 +496,44 @@ export default function Chat() {
                         <pre className="whitespace-pre-wrap font-sans bg-transparent p-0 m-0 border-none">{message.content}</pre>
                       ) : (
                         <div className="prose prose-sm max-w-none dark:prose-invert">
-                          {message.content ? (
-                            <ReactMarkdown>{message.content}</ReactMarkdown>
-                          ) : (
-                            <div className="flex items-center gap-1.5 py-1">
-                              <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce" />
-                              <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-150" />
-                              <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-300" />
+                          {message.thoughts && message.thoughts.length > 0 && (
+                            <div className="mb-3 p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
+                              <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1">
+                                <span className="text-amber-500">🤔</span>
+                                思考过程
+                              </div>
+                              <div className="space-y-1.5">
+                                {message.thoughts.map((thought, idx) => (
+                                  <div key={idx} className="text-xs text-amber-600/80 dark:text-amber-400/70 flex items-start gap-2">
+                                    <span className="text-amber-400/50 mt-0.5">•</span>
+                                    <span>{thought}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
+                           {message.content ? (
+                              <ReactMarkdown>{message.content}</ReactMarkdown>
+                            ) : message.isStreaming ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 py-1">
+                                  <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce" />
+                                  <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-150" />
+                                  <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce delay-300" />
+                                </div>
+                                {message.status && (
+                                  <span className="text-xs text-muted-foreground ml-2">{message.status}</span>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="ml-2 h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                  onClick={() => abortControllerRef.current?.abort()}
+                                >
+                                  取消
+                                </Button>
+                              </div>
+                            ) : null}
                         </div>
                       )}
                     </div>
@@ -507,17 +590,8 @@ export default function Chat() {
                 </Button>
               </div>
               <div className="text-center mt-2 text-xs text-muted-foreground/60 flex items-center justify-center gap-4">
-                <span>AI 内容可能并不完全准确，请核对重要信息。</span>
-                <label className="flex items-center gap-1.5 cursor-pointer hover:text-primary transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={isDeepThinking}
-                    onChange={(e) => setIsDeepThinking(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  深度思考
-                </label>
-              </div>
+                  <span>AI 内容可能并不完全准确，请核对重要信息。</span>
+                </div>
             </div>
           </>
         ) : (

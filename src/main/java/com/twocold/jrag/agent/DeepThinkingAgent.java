@@ -5,6 +5,8 @@ import dev.langchain4j.data.message.ChatMessage;
 
 import java.util.List;
 
+import reactor.core.publisher.Flux;
+
 /**
  * 深度思考 Agent 接口
  * 基于 ReAct (Reasoning + Acting) 范式实现的智能体。
@@ -13,12 +15,12 @@ import java.util.List;
 public interface DeepThinkingAgent {
 
     /**
-     * 执行 Agent 对话
+     * 执行 Agent 对话 (流式)
      * 系统提示词通过动态注入实现数据库管理。
      *
      * @param messages 对话历史消息列表
-     * @return Agent 的最终回答
+     * @return Agent 的流式回答
      */
     @Observed(name = "Deep Thinking Agent")
-    String chat(List<ChatMessage> messages);
+    Flux<String> chat(List<ChatMessage> messages);
 }
