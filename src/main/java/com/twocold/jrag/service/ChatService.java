@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 public class ChatService {
 
     private static final int MAX_CONTEXT_MESSAGES = 10;
+    private static final String GENERIC_STREAM_ERROR_MESSAGE = "抱歉，服务暂时繁忙，请稍后重试。";
 
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -234,7 +235,7 @@ public class ChatService {
                 log.error("streamChat 处理失败", e);
                 sink.next(ServerSentEvent.<String>builder()
                         .event("error")
-                        .data("处理您的请求时遇到错误: " + e.getMessage())
+                        .data(GENERIC_STREAM_ERROR_MESSAGE)
                         .build());
                 sink.error(e);
             } finally {
@@ -307,7 +308,7 @@ public class ChatService {
                     log.error("深度思考模式流处理失败", error);
                     sink.next(ServerSentEvent.<String>builder()
                             .event("message")
-                            .data("抱歉，深度思考模式遇到问题: " + error.getMessage())
+                            .data("抱歉，深度思考模式暂时不可用，请稍后重试。")
                             .build());
                     sink.error(error);
                 },
