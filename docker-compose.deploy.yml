@@ -21,7 +21,7 @@ services:
       - jrag-network
 
   backend:
-    image: ghcr.io/twocold0451/jrag-backend:latest
+    image: ghcr.io/twocold0451/j-rag-backend:latest
     container_name: jrag-backend
     restart: always
     env_file:
@@ -40,7 +40,7 @@ services:
       - jrag-network
 
   frontend:
-    image: ghcr.io/twocold0451/jrag-frontend:latest
+    image: ghcr.io/twocold0451/j-rag-frontend:latest
     container_name: jrag-frontend
     restart: always
     ports:
