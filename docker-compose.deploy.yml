@@ -1,5 +1,4 @@
 services:
-  # --- Database Service ---
   db:
     image: pgvector/pgvector:pg16
     container_name: jrag-postgres
@@ -21,25 +20,16 @@ services:
     networks:
       - jrag-network
 
-  # --- Backend Service (Spring Boot) ---
   backend:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/twocold0451/jrag-backend:latest
     container_name: jrag-backend
     restart: always
-    
-    # 核心改动：直接加载 .env 文件中的所有变量
     env_file:
       - .env
     environment:
-      # 仅保留需要重命名或覆盖的特殊变量
-      # Spring Boot 默认不识别 DB_URL，需要手动映射
       SPRING_DATASOURCE_URL: ${DB_URL}
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      
-      # 确保生产环境配置生效
       SPRING_PROFILES_ACTIVE: prod
     ports:
       - "8080:8080"
@@ -49,11 +39,8 @@ services:
     networks:
       - jrag-network
 
-  # --- Frontend Service (React + Nginx) ---
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/twocold0451/jrag-frontend:latest
     container_name: jrag-frontend
     restart: always
     ports:
