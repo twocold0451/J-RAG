@@ -19,10 +19,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image_name: jrag-backend
+          - image_name: j-rag-backend
             context: .
             dockerfile: ./Dockerfile
-          - image_name: jrag-frontend
+          - image_name: j-rag-frontend
             context: ./frontend
             dockerfile: ./Dockerfile
 
