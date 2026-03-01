@@ -5,8 +5,8 @@ services:
     restart: always
     environment:
       POSTGRES_DB: jrag
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     ports:
       - "5432:5432"
     volumes:
@@ -26,6 +26,8 @@ services:
     restart: always
     env_file:
       - .env
+    volumes:
+      - ./logs/backend:/app/logs
     environment:
       SPRING_DATASOURCE_URL: ${DB_URL}
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
