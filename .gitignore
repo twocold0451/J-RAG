@@ -15,6 +15,7 @@ logs/
 
 # Environment variables
 .env
+frontend/.env.local
 src/main/resources/application.properties
 
 # Local database data
