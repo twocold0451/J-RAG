@@ -16,7 +16,7 @@ import type {
   IngestUrlRequest,
 } from '@/types'
 
-const API_BASE = (import.meta.env?.VITE_API_BASE_URL as string) || '/api'
+const API_BASE = ((import.meta.env?.VITE_API_BASE_URL as string) || '/api').replace(/\/$/, '')
 
 interface StreamChatCallbacks {
   onMessage: (data: string) => void

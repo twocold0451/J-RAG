@@ -26,6 +26,7 @@ import type { AdminUserResponse, UserGroupDto } from '@/types'
 
 export default function Users() {
   const { showToast } = useToast()
+  const protectedUsernameSet = new Set(['admin', '肯德基'])
   const [users, setUsers] = useState<AdminUserResponse[]>([])
   const [groups, setGroups] = useState<UserGroupDto[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -98,6 +99,12 @@ export default function Users() {
   }
 
   const handleDeleteUser = async (id: number) => {
+    const targetUser = users.find(u => u.id === id)
+    if (targetUser && protectedUsernameSet.has(targetUser.username)) {
+      showToast(`账号 ${targetUser.username} 已禁止在前端删除`, 'error')
+      return
+    }
+
     try {
       await api.deleteUser(id)
       setUsers(prev => prev.filter(u => u.id !== id))
@@ -108,6 +115,10 @@ export default function Users() {
   }
 
   const openResetDialog = (user: AdminUserResponse) => {
+    if (protectedUsernameSet.has(user.username)) {
+      showToast(`账号 ${user.username} 已禁止在前端重置密码`, 'error')
+      return
+    }
     setResettingUser(user)
     setResetResult(null)
     setIsResetOpen(true)
@@ -115,6 +126,11 @@ export default function Users() {
 
   const handleResetPassword = async () => {
     if (!resettingUser) return
+    if (protectedUsernameSet.has(resettingUser.username)) {
+      showToast(`账号 ${resettingUser.username} 已禁止在前端重置密码`, 'error')
+      setIsResetOpen(false)
+      return
+    }
 
     setIsResetting(true)
     try {
@@ -252,7 +268,8 @@ export default function Users() {
                         size="icon"
                         className="h-8 w-8 hover:bg-amber-100 hover:text-amber-600"
                         onClick={() => openResetDialog(user)}
-                        title="重置密码"
+                        disabled={protectedUsernameSet.has(user.username)}
+                        title={protectedUsernameSet.has(user.username) ? '受保护账号，禁止重置密码' : '重置密码'}
                       >
                         <KeyRound className="w-4 h-4" />
                       </Button>
@@ -261,6 +278,8 @@ export default function Users() {
                         size="icon"
                         className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => handleDeleteUser(user.id)}
+                        disabled={protectedUsernameSet.has(user.username)}
+                        title={protectedUsernameSet.has(user.username) ? '受保护账号，禁止删除' : '删除用户'}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

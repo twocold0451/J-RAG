@@ -13,6 +13,8 @@ import type { UserGroupDto } from '@/types'
 
 export default function Settings() {
   const { user } = useAuthStore()
+  const protectedUsernameSet = new Set(['admin', '肯德基'])
+  const isPasswordLocked = protectedUsernameSet.has(user?.username || '')
   const [groups, setGroups] = useState<UserGroupDto[]>([])
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -50,6 +52,10 @@ export default function Settings() {
   }
 
   const handleChangePassword = async () => {
+    if (isPasswordLocked) {
+      setMessage({ type: 'error', text: '当前账号已禁止在前端修改密码' })
+      return
+    }
     if (!passwordForm.currentPassword) {
       setMessage({ type: 'error', text: '请输入当前密码' })
       return
@@ -153,9 +159,17 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <CardTitle>修改密码</CardTitle>
-          <CardDescription>定期更换密码可以保护账户安全</CardDescription>
+          <CardDescription>
+            {isPasswordLocked ? '当前账号已锁定前端改密操作' : '定期更换密码可以保护账户安全'}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isPasswordLocked && (
+            <div className="p-3 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-sm">
+              账号 <strong>{user?.username}</strong> 已设置为受保护账号，不允许修改密码。
+            </div>
+          )}
+
           {message && (
             <div className={`p-3 rounded-lg flex items-center gap-2 ${
               message.type === 'success'
@@ -176,6 +190,7 @@ export default function Settings() {
                 placeholder="输入当前密码"
                 value={passwordForm.currentPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                disabled={isPasswordLocked}
               />
               <Button
                 type="button"
@@ -183,6 +198,7 @@ export default function Settings() {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
                 onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
+                disabled={isPasswordLocked}
               >
                 {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </Button>
@@ -201,6 +217,7 @@ export default function Settings() {
                 placeholder="输入新密码"
                 value={passwordForm.newPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                disabled={isPasswordLocked}
               />
               <Button
                 type="button"
@@ -208,6 +225,7 @@ export default function Settings() {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
                 onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
+                disabled={isPasswordLocked}
               >
                 {showPasswords.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </Button>
@@ -223,6 +241,7 @@ export default function Settings() {
                 placeholder="再次输入新密码"
                 value={passwordForm.confirmPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                disabled={isPasswordLocked}
               />
               <Button
                 type="button"
@@ -230,30 +249,33 @@ export default function Settings() {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
                 onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
+                disabled={isPasswordLocked}
               >
                 {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 pt-2">
-            <Button
-              onClick={handleGeneratePassword}
-              variant="outline"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              生成随机密码
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              生成12位包含大小写字母、数字和特殊字符的强密码
-            </span>
-          </div>
+          {!isPasswordLocked && (
+            <div className="flex items-center gap-4 pt-2">
+              <Button
+                onClick={handleGeneratePassword}
+                variant="outline"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                生成随机密码
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                生成12位包含大小写字母、数字和特殊字符的强密码
+              </span>
+            </div>
+          )}
 
           <Separator />
 
           <div className="flex justify-end">
-            <Button onClick={handleChangePassword} disabled={isLoading}>
-              {isLoading ? '保存中...' : '保存修改'}
+            <Button onClick={handleChangePassword} disabled={isLoading || isPasswordLocked}>
+              {isPasswordLocked ? '已禁用' : isLoading ? '保存中...' : '保存修改'}
             </Button>
           </div>
         </CardContent>
