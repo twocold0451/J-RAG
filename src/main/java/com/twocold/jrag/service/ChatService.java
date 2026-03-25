@@ -289,7 +289,7 @@ public class ChatService {
                     .build();
             
             Flux<String> tokenFlux = requestScopedAgent.chat(agentMessages)
-                .timeout(Duration.ofSeconds(60))
+                .timeout(Duration.ofSeconds(300))
                 .onErrorResume(TimeoutException.class, e -> {
                     log.warn("DeepThinkingAgent 执行超时");
                     return Flux.just("抱歉，思考过程超时，请尝试简化问题或提供更多上下文。");
