@@ -28,14 +28,15 @@ public class LangFuseService {
 
     public LangFuseService(RagProperties ragProperties, RestClient.Builder builder) {
         this.properties = ragProperties.langfuse();
-        
+
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
         this.objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        // 只序列化字段，不使用方法，且只包含基本类型
         this.objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE);
-        this.objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
-        
+        this.objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.PUBLIC_ONLY);
+
         if (properties != null && properties.enabled()) {
             this.restClient = builder
                     .baseUrl(properties.baseUrl())

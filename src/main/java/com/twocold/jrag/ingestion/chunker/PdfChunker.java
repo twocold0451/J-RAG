@@ -4,10 +4,7 @@ import com.twocold.jrag.config.RagProperties;
 import com.twocold.jrag.ingestion.chunker.pdf.PdfElementProcessorFactory;
 import com.twocold.jrag.ingestion.chunker.pdf.PdfElementResult;
 import com.twocold.jrag.ingestion.utils.TextCleaner;
-import dev.langchain4j.data.document.Document;
-import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.Metadata;
-import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.segment.TextSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,9 +60,8 @@ public class PdfChunker implements DocumentChunker {
             int totalPages = pdfDoc.getNumberOfPages();
             log.info("PDF 共有 {} 页，正在使用元素处理器进行处理", totalPages);
 
-            DocumentSplitter splitter = DocumentSplitters.recursive(
-                    ragProperties.chunking().size(),
-                    ragProperties.chunking().overlap());
+            int overlapSize = ragProperties.chunking().overlap();
+            String previousPageOverlap = "";
 
             for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
                 // 使用处理器工厂处理页面
@@ -92,26 +88,35 @@ public class PdfChunker implements DocumentChunker {
                     
                     log.debug("第 {} 页处理的元素类型: {}", pageNum, elementTypes);
 
-                    // 如果单页内容超过 chunk size，进行二次切分
-                    if (pageContent.length() > ragProperties.chunking().size()) {
-                        Document pageDoc = Document.from(pageContent);
-                        List<TextSegment> pageSegments = splitter.split(pageDoc);
+                    // 拼接上一页的 overlap
+                    String chunkContent = previousPageOverlap.isEmpty() ? pageContent : previousPageOverlap + "\n" + pageContent;
 
-                        for (TextSegment seg : pageSegments) {
-                            TextSegment segmentWithMeta = TextSegment.from(
-                                    seg.text(),
-                                    Metadata.from("page", String.valueOf(pageNum))
-                                            .put("source", filePath.getFileName().toString())
-                                            .put("elements", elementTypes));
-                            segments.add(segmentWithMeta);
+                    TextSegment segment = TextSegment.from(
+                            chunkContent,
+                            Metadata.from("page", String.valueOf(pageNum))
+                                    .put("source", filePath.getFileName().toString())
+                                    .put("elements", elementTypes));
+                    segments.add(segment);
+
+                    // 更新上一页的 overlap，供下一页使用
+                    if (chunkContent.length() > overlapSize) {
+                        // 从后往前截取 overlapSize，并尽量找到最近的空白字符避免截断单词
+                        int sliceIndex = chunkContent.length() - overlapSize;
+                        int spaceIndex = -1;
+                        for (int i = sliceIndex; i < chunkContent.length(); i++) {
+                            char c = chunkContent.charAt(i);
+                            if (Character.isWhitespace(c)) {
+                                spaceIndex = i;
+                                break;
+                            }
+                        }
+                        if (spaceIndex != -1) {
+                            previousPageOverlap = chunkContent.substring(spaceIndex).trim();
+                        } else {
+                            previousPageOverlap = chunkContent.substring(sliceIndex);
                         }
                     } else {
-                        TextSegment segment = TextSegment.from(
-                                pageContent,
-                                Metadata.from("page", String.valueOf(pageNum))
-                                        .put("source", filePath.getFileName().toString())
-                                        .put("elements", elementTypes));
-                        segments.add(segment);
+                        previousPageOverlap = chunkContent;
                     }
                 }
 

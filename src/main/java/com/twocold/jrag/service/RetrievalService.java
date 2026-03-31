@@ -1,5 +1,6 @@
 package com.twocold.jrag.service;
 
+import com.twocold.jrag.config.ObservationUtil;
 import com.twocold.jrag.config.Observed;
 import com.twocold.jrag.config.RagProperties;
 import com.twocold.jrag.config.TraceContext;
@@ -24,6 +25,9 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -48,6 +52,7 @@ public class RetrievalService {
     private final ScoringModel scoringModel;
     private final LangFuseService langFuseService;
     private final ApplicationContext applicationContext;
+    private final ObservationUtil observationUtil;
 
     static {
         new ObjectMapper()
@@ -112,150 +117,23 @@ public class RetrievalService {
                     .map(uuid -> "'" + uuid.toString() + "'")
                     .collect(Collectors.joining(", "));
 
-            // 1. Prepare Vector Search Task
-            CompletableFuture<List<Chunk>> vectorSearchFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    Instant startTime = Instant.now();
-                    long vectorSearchStart = System.currentTimeMillis();
-                    TextSegment questionSegment = TextSegment.from(question);
-                    float[] queryEmbedding = embeddingModel.embedAll(List.of(questionSegment)).content().getFirst().vector();
-                    String vectorSql = "SELECT id, document_id, content, content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
-                            "FROM chunks " +
-                            "WHERE document_id IN (" + documentIdsClause + ") " +
-                            "ORDER BY content_vector <=> ?::vector " +
-                            "LIMIT ?";
-                    // MMR Parameters
-                    int fetchK = searchK * 3; 
-                    double mmrLambda = 0.5;   
-                    List<Chunk> initialResults = jdbcClient.sql(vectorSql)
-                            .params(new PGvector(queryEmbedding), fetchK)
-                            .query(new ChunkRowMapper())
-                            .list();
-                    log.debug("向量搜索在 {} 毫秒内获取了 {} 个候选片段", System.currentTimeMillis() - vectorSearchStart, initialResults.size());
+            // 1. 向量搜索
+            Mono<List<Chunk>> vectorSearchMono = executeVectorSearch(
+                    question, documentIdsClause, searchK, parentSpanId, traceId);
 
-                    List<Chunk> finalResults = MmrUtils.applyMmr(initialResults, queryEmbedding, searchK, mmrLambda);
-                    finalResults.forEach(c -> c.setContentVector(null));
+            // 2. 关键词搜索
+            Mono<List<Chunk>> keywordSearchMono = executeKeywordSearch(
+                    question, documentIdsClause, searchK, parentSpanId, traceId);
 
-                    langFuseService.createSpan(null, traceId, parentSpanId, "Vector Search", null,
-                            finalResults.stream().limit(10).collect(Collectors.toMap(
-                                    chunk -> chunk.getId().toString(),
-                                    c -> StringUtils.left(c.getContent(), 20)
-                            )),
-                            startTime, Instant.now());
-
-                    return finalResults;
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }, searchExecutor);
-
-            // 2. Prepare Keyword Search Task
-            CompletableFuture<List<Chunk>> keywordSearchFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    long keywordSearchStart = System.currentTimeMillis();
-                    Instant startTime = Instant.now();
-                    List<SegToken> tokens = jiebaSegmenter.process(question, JiebaSegmenter.SegMode.SEARCH);
-
-                    String segmentedQuery = tokens.stream()
-                            .map(i -> i.word)
-                            .filter(word -> !stopWords.contains(word))
-                            .collect(Collectors.joining(" "));
-                    if (segmentedQuery.isBlank()) {
-                        segmentedQuery = tokens.stream().map(i -> i.word).collect(Collectors.joining(" "));
-                    }
-
-                    String tsQuery = Arrays.stream(segmentedQuery.split("\\s+"))
-                            .filter(s -> !s.isBlank())
-                            .distinct()
-                            .collect(Collectors.joining(" | "));
-                    if (tsQuery.isBlank()) {
-                        tsQuery = question;
-                    }
-                    log.debug("关键字搜索分词查询：'{}' -> tsquery: '{}'", 
-                            com.twocold.jrag.utils.LogMaskingUtils.maskQuery(segmentedQuery), tsQuery);
-                    String keywordSql = "SELECT id, document_id, content, NULL as content_vector, chunk_index, source_meta, chunker_name, content_keywords, created_at " +
-                            "FROM chunks " +
-                            "WHERE document_id IN (" + documentIdsClause + ") " +
-                            "AND content_search @@ to_tsquery('simple', ?) " +
-                            "ORDER BY ts_rank(content_search, to_tsquery('simple', ?)) DESC " +
-                            "LIMIT ?";
-                    List<Chunk> results = jdbcClient.sql(keywordSql)
-                            .params(tsQuery, tsQuery, searchK)
-                            .query(new ChunkRowMapper())
-                            .list();
-                    log.debug("关键字搜索在 {} 毫秒内找到了 {} 个结果", System.currentTimeMillis() - keywordSearchStart, results.size());
-
-                    langFuseService.createSpan(null, traceId, parentSpanId, "Keyword Search",
-                            Map.of("tsQuery", tsQuery),
-                            results.stream().limit(10).collect(Collectors.toMap(
-                                    chunk -> chunk.getId().toString(),
-                                    c -> StringUtils.left(c.getContent(), 20)
-                            )),
-                            startTime, Instant.now());
-
-                    return results;
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }, searchExecutor);
-
-            CompletableFuture.allOf(vectorSearchFuture, keywordSearchFuture).join();
-            List<Chunk> vectorResults = vectorSearchFuture.get();
-            List<Chunk> keywordResults = keywordSearchFuture.get();
-
-            List<Chunk> finalResults;
-            if (rerankEnabled && scoringModel != null) {
-                Map<UUID, Chunk> combinedMap = new LinkedHashMap<>();
-                vectorResults.forEach(c -> combinedMap.put(c.getId(), c));
-                keywordResults.forEach(c -> combinedMap.put(c.getId(), c));
-                List<Chunk> candidates = new ArrayList<>(combinedMap.values());
-                
-                log.debug("重排序模式：合并后共有 {} 个候选片段", candidates.size());
-                List<TextSegment> segments = candidates.stream()
-                        .map(c -> TextSegment.from(c.getContent()))
-                        .collect(Collectors.toList());
-                Response<List<Double>> scoresResponse = scoringModel.scoreAll(segments, question);
-                List<Double> scores = scoresResponse.content();
-
-                finalResults = new ArrayList<>();
-                for (int i = 0; i < candidates.size(); i++) {
-                    Chunk candidate = candidates.get(i);
-                    double score = i < scores.size() ? scores.get(i) : 0.0;
-                    candidate.setScore(score);
-                    finalResults.add(candidate);
-                }
-
-                finalResults.sort(Comparator.comparingDouble(Chunk::getScore).reversed());
-                finalResults = finalResults.stream().limit(topK).collect(Collectors.toList());
-                
-                log.debug("重排序完成。最终返回 {} 个片段。", finalResults.size());
-            } else {
-                int rrfK = 60;
-                Map<UUID, Double> rrfScores = new HashMap<>();
-                Map<UUID, Chunk> chunkMap = new HashMap<>();
-
-                for (int i = 0; i < vectorResults.size(); i++) {
-                    Chunk chunk = vectorResults.get(i);
-                    chunkMap.putIfAbsent(chunk.getId(), chunk);
-                    rrfScores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
-                }
-
-                for (int i = 0; i < keywordResults.size(); i++) {
-                    Chunk chunk = keywordResults.get(i);
-                    chunkMap.putIfAbsent(chunk.getId(), chunk);
-                    rrfScores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
-                }
-
-                finalResults = rrfScores.entrySet().stream()
-                        .sorted(Map.Entry.<UUID, Double>comparingByValue().reversed())
-                        .limit(topK)
-                        .map(entry -> chunkMap.get(entry.getKey()))
-                        .collect(Collectors.toList());
-
-                log.debug("RRF 融合完成。最终得到 {} 个片段。", finalResults.size());
-            }
-
-            return finalResults;
+            // 使用Mono.zip并行执行两个搜索
+            return Mono.zip(vectorSearchMono, keywordSearchMono)
+                    .flatMap(tuple -> {
+                        List<Chunk> vectorResults = tuple.getT1();
+                        List<Chunk> keywordResults = tuple.getT2();
+                        return processSearchResults(vectorResults, keywordResults,
+                                question, topK, rerankEnabled, traceId, parentSpanId);
+                    })
+                    .block(); // 保持同步返回（暂时）
 
         } catch (Exception e) {
             log.error("执行混合搜索时出错", e);
@@ -317,5 +195,271 @@ public class RetrievalService {
             chunk.setCreatedAt(rs.getObject("created_at", java.time.OffsetDateTime.class));
             return chunk;
         }
+    }
+
+    /**
+     * 向量搜索（响应式）- 带详细子步骤观察
+     * @param question 查询问题
+     * @param documentIdsClause 文档ID列表SQL片段
+     * @param searchK 搜索数量
+     * @param parentSpanId 父span ID
+     * @param traceId trace ID
+     * @return Mono<List<Chunk>>
+     */
+    Mono<List<Chunk>> executeVectorSearch(String question, String documentIdsClause, int searchK,
+                                          String parentSpanId, String traceId) {
+        // 当前向量搜索的span ID
+        String currentSpanId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        Instant vectorSearchStart = Instant.now();
+
+        return Mono.fromCallable(() -> {
+            // 步骤1：生成嵌入向量
+            float[] queryEmbedding = observationUtil.observeStep(
+                    "Embedding Generation",
+                    traceId,
+                    currentSpanId,
+                    Map.of("query", question, "queryLength", question.length()),
+                    () -> {
+                        TextSegment questionSegment = TextSegment.from(question);
+                        return embeddingModel.embedAll(List.of(questionSegment))
+                                .content().getFirst().vector();
+                    }
+            );
+
+            // 步骤2：向量数据库查询
+            List<Chunk> initialResults = observationUtil.observeStep(
+                    "Vector Database Query",
+                    traceId,
+                    currentSpanId,
+                    Map.of("searchK", searchK, "fetchK", searchK * 3),
+                    () -> {
+                        String vectorSql = "SELECT id, document_id, content, content_vector, chunk_index, source_meta, " +
+                                "chunker_name, content_keywords, created_at " +
+                                "FROM chunks WHERE document_id IN (" + documentIdsClause + ") " +
+                                "ORDER BY content_vector <=> ?::vector LIMIT ?";
+                        return jdbcClient.sql(vectorSql)
+                                .params(new PGvector(queryEmbedding), searchK * 3)
+                                .query(new ChunkRowMapper())
+                                .list();
+                    }
+            );
+
+            // 步骤3：MMR去重
+            List<Chunk> finalResults = observationUtil.observeStep(
+                    "MMR Deduplication",
+                    traceId,
+                    currentSpanId,
+                    Map.of("candidates", initialResults.size(), "targetK", searchK),
+                    () -> {
+                        List<Chunk> results = MmrUtils.applyMmr(initialResults, queryEmbedding, searchK, 0.5);
+                        results.forEach(c -> c.setContentVector(null));
+                        return results;
+                    }
+            );
+
+            // 记录整个向量搜索的总时间
+            langFuseService.createSpan(
+                    currentSpanId,
+                    traceId,
+                    parentSpanId,
+                    "Vector Search",
+                    Map.of("query", com.twocold.jrag.utils.LogMaskingUtils.maskQuery(question)),
+                    finalResults.stream().limit(10).collect(Collectors.toMap(
+                            chunk -> chunk.getId().toString(),
+                            c -> StringUtils.left(c.getContent(), 20)
+                    )),
+                    vectorSearchStart,
+                    Instant.now()
+            );
+            return finalResults;
+        }).subscribeOn(Schedulers.boundedElastic())
+                .doOnSuccess(results -> log.debug("向量搜索完成: {} 个结果", results.size()))
+                .doOnError(e -> log.error("向量搜索失败", e));
+    }
+
+    /**
+     * 关键词搜索（响应式）- 带详细子步骤观察
+     * @param question 查询问题
+     * @param documentIdsClause 文档ID列表SQL片段
+     * @param searchK 搜索数量
+     * @param parentSpanId 父span ID
+     * @param traceId trace ID
+     * @return Mono<List<Chunk>>
+     */
+    Mono<List<Chunk>> executeKeywordSearch(String question, String documentIdsClause, int searchK,
+                                            String parentSpanId, String traceId) {
+        // 当前关键词搜索的span ID
+        String currentSpanId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        Instant keywordSearchStart = Instant.now();
+
+        return Mono.fromCallable(() -> {
+            // 步骤1：中文分词
+            List<SegToken> tokens = observationUtil.observeStep(
+                    "Chinese Tokenization",
+                    traceId,
+                    currentSpanId,
+                    Map.of("query", question, "queryLength", question.length()),
+                    () -> jiebaSegmenter.process(question, JiebaSegmenter.SegMode.SEARCH)
+            );
+
+            // 步骤2：构建查询（停用词过滤 + tsquery 构建）
+            String tsQuery = observationUtil.observeStep(
+                    "Build TSQuery",
+                    traceId,
+                    currentSpanId,
+                    Map.of("tokenCount", tokens.size()),
+                    () -> {
+                        String segmentedQuery = tokens.stream()
+                                .map(token -> token.word)
+                                .filter(word -> !stopWords.contains(word))
+                                .collect(Collectors.joining(" "));
+
+                        if (segmentedQuery.isBlank()) {
+                            segmentedQuery = tokens.stream()
+                                    .map(token -> token.word)
+                                    .collect(Collectors.joining(" "));
+                        }
+
+                        String query = Arrays.stream(segmentedQuery.split("\\s+"))
+                                .filter(s -> !s.isBlank())
+                                .distinct()
+                                .collect(Collectors.joining(" | "));
+
+                        return query.isBlank() ? question : query;
+                    }
+            );
+
+            log.debug("关键词搜索分词：'{}' -> tsquery: '{}'",
+                    com.twocold.jrag.utils.LogMaskingUtils.maskQuery(question), tsQuery);
+
+            // 步骤3：关键词数据库查询
+            List<Chunk> results = observationUtil.observeStep(
+                    "Keyword Database Query",
+                    traceId,
+                    currentSpanId,
+                    Map.of("tsQuery", tsQuery, "searchK", searchK),
+                    () -> {
+                        String keywordSql = "SELECT id, document_id, content, NULL as content_vector, " +
+                                "chunk_index, source_meta, chunker_name, content_keywords, created_at " +
+                                "FROM chunks WHERE document_id IN (" + documentIdsClause + ") " +
+                                "AND content_search @@ to_tsquery('simple', ?) " +
+                                "ORDER BY ts_rank(content_search, to_tsquery('simple', ?)) DESC LIMIT ?";
+
+                        return jdbcClient.sql(keywordSql)
+                                .params(tsQuery, tsQuery, searchK)
+                                .query(new ChunkRowMapper())
+                                .list();
+                    }
+            );
+
+            // 记录整个关键词搜索的总时间
+            langFuseService.createSpan(
+                    currentSpanId,
+                    traceId,
+                    parentSpanId,
+                    "Keyword Search",
+                    Map.of("query", com.twocold.jrag.utils.LogMaskingUtils.maskQuery(question)),
+                    results.stream().limit(10).collect(Collectors.toMap(
+                            chunk -> chunk.getId().toString(),
+                            c -> StringUtils.left(c.getContent(), 20)
+                    )),
+                    keywordSearchStart,
+                    Instant.now()
+            );
+
+            return results;
+
+        }).subscribeOn(Schedulers.boundedElastic())
+                .doOnSuccess(results -> log.debug("关键词搜索完成: {} 个结果", results.size()))
+                .doOnError(e -> log.error("关键词搜索失败", e));
+    }
+
+    /**
+     * 处理搜索结果（RRF融合或重排序）
+     */
+    private Mono<List<Chunk>> processSearchResults(List<Chunk> vectorResults, List<Chunk> keywordResults,
+                                                   String question, int topK, boolean rerankEnabled,
+                                                   String traceId, String parentSpanId) {
+        return Mono.fromCallable(() -> {
+            if (rerankEnabled && scoringModel != null) {
+                return rerank(vectorResults, keywordResults, question, topK, traceId, parentSpanId);
+            } else {
+                return rrfFusion(vectorResults, keywordResults, topK);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * RRF融合
+     */
+    private List<Chunk> rrfFusion(List<Chunk> vectorResults, List<Chunk> keywordResults, int topK) {
+        int rrfK = 60;
+        Map<UUID, Double> rrfScores = new HashMap<>();
+        Map<UUID, Chunk> chunkMap = new HashMap<>();
+
+        for (int i = 0; i < vectorResults.size(); i++) {
+            Chunk chunk = vectorResults.get(i);
+            chunkMap.putIfAbsent(chunk.getId(), chunk);
+            rrfScores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
+        }
+
+        for (int i = 0; i < keywordResults.size(); i++) {
+            Chunk chunk = keywordResults.get(i);
+            chunkMap.putIfAbsent(chunk.getId(), chunk);
+            rrfScores.merge(chunk.getId(), 1.0 / (rrfK + i + 1), Double::sum);
+        }
+
+        List<Chunk> finalResults = rrfScores.entrySet().stream()
+                .sorted(Map.Entry.<UUID, Double>comparingByValue().reversed())
+                .limit(topK)
+                .map(entry -> chunkMap.get(entry.getKey()))
+                .collect(Collectors.toList());
+
+        log.debug("RRF融合完成。最终得到 {} 个片段。", finalResults.size());
+        return finalResults;
+    }
+
+    /**
+     * 重排序
+     */
+    private List<Chunk> rerank(List<Chunk> vectorResults, List<Chunk> keywordResults,
+                              String question, int topK, String traceId, String parentSpanId) {
+
+        Map<UUID, Chunk> combinedMap = new LinkedHashMap<>();
+        vectorResults.forEach(c -> combinedMap.put(c.getId(), c));
+        keywordResults.forEach(c -> combinedMap.put(c.getId(), c));
+        List<Chunk> candidates = new ArrayList<>(combinedMap.values());
+
+        log.debug("重排序模式：合并后共有 {} 个候选片段", candidates.size());
+
+        // 使用ObservationUtil记录重排序
+        List<Chunk> finalResults = observationUtil.observeStep(
+            "Reranking",
+            traceId,
+            parentSpanId,
+            Map.of("candidates", candidates.size()),
+            () -> {
+                List<TextSegment> segments = candidates.stream()
+                        .map(c -> TextSegment.from(c.getContent()))
+                        .collect(Collectors.toList());
+
+                Response<List<Double>> scoresResponse = scoringModel.scoreAll(segments, question);
+                List<Double> scores = scoresResponse.content();
+
+                List<Chunk> results = new ArrayList<>();
+                for (int i = 0; i < candidates.size(); i++) {
+                    Chunk candidate = candidates.get(i);
+                    double score = i < scores.size() ? scores.get(i) : 0.0;
+                    candidate.setScore(score);
+                    results.add(candidate);
+                }
+
+                results.sort(Comparator.comparingDouble(Chunk::getScore).reversed());
+                return results.stream().limit(topK).collect(Collectors.toList());
+            }
+        );
+
+        log.debug("重排序完成。最终返回 {} 个片段。", finalResults.size());
+        return finalResults;
     }
 }
