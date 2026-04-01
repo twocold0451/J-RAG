@@ -45,13 +45,18 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
                 }
             },
             // JSONB to String converter (for source_meta field)
-                (Converter<PGobject, String>) source -> {
+            new Converter<PGobject, String>() {
+                @Override
+                public String convert(PGobject source) {
                     if (source == null) {
                         return null;
                     }
                     return source.getValue();
-                },
-                (Converter<String, PGobject>) source -> {
+                }
+            },
+            new Converter<String, PGobject>() {
+                @Override
+                public PGobject convert(String source) {
                     if (source == null) {
                         return null;
                     }
@@ -63,14 +68,18 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
                         throw new RuntimeException(e);
                     }
                     return pgObject;
-                },
+                }
+            },
             // tsvector to String converter (for content_search field - read only)
-                (Converter<PGobject, String>) source -> {
+            new Converter<PGobject, String>() {
+                @Override
+                public String convert(PGobject source) {
                     if (source == null) {
                         return null;
                     }
                     return source.getValue();
                 }
+            }
         );
     }
 }
