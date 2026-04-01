@@ -2,11 +2,10 @@ package com.twocold.jrag.ingestion;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.twocold.jrag.domain.DocumentStatus;
-import com.huaban.analysis.jieba.JiebaSegmenter;
-import com.huaban.analysis.jieba.SegToken;
 import com.twocold.jrag.ingestion.chunker.DocumentChunker;
 import com.twocold.jrag.ingestion.chunker.DocumentChunkerFactory;
 import com.twocold.jrag.service.DocumentService;
+import com.twocold.jrag.service.TextAnalysisService;
 import com.twocold.jrag.api.dto.DocumentUpdateMessage;
 import com.pgvector.PGvector;
 import dev.langchain4j.data.segment.TextSegment;
@@ -30,15 +29,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import jakarta.annotation.PostConstruct;
-import org.springframework.core.io.ClassPathResource;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
-import java.util.Set;
 
 @Slf4j
 @Service
@@ -52,30 +42,7 @@ public class IngestionServiceImpl implements IngestionService {
     private final SimpMessagingTemplate messagingTemplate;
     private final DocumentChunkerFactory chunkerFactory;
     private final ObjectMapper objectMapper;
-    private final JiebaSegmenter jiebaSegmenter = new JiebaSegmenter();
-    private final Set<String> stopWords = new HashSet<>();
-
-    @PostConstruct
-    public void loadStopWords() {
-        try {
-            ClassPathResource resource = new ClassPathResource("stopwords.txt");
-            if (resource.exists()) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (!line.trim().isEmpty()) {
-                            stopWords.add(line.trim());
-                        }
-                    }
-                }
-                log.info("IngestionService: 已加载 {} 个停用词。", stopWords.size());
-            } else {
-                log.error("IngestionService: 未找到 stopwords.txt。");
-            }
-        } catch (Exception e) {
-            log.error("IngestionService: Failed to load stop words", e);
-        }
-    }
+    private final TextAnalysisService textAnalysisService;
 
     @Override
     @Async("ingestionTaskExecutor")
@@ -168,12 +135,8 @@ public class IngestionServiceImpl implements IngestionService {
                     TextSegment segment = batchSegments.get(j);
                     float[] embedding = batchEmbeddings.get(j).vector();
 
-                    // 生成关键词
-                    List<SegToken> tokens = jiebaSegmenter.process(segment.text(), JiebaSegmenter.SegMode.SEARCH);
-                    String contentKeywords = tokens.stream()
-                            .map(item -> item.word)
-                            .filter(word -> !stopWords.contains(word))
-                            .collect(Collectors.joining(" "));
+                    // 使用 TextAnalysisService 生成关键词
+                    String contentKeywords = textAnalysisService.extractKeywords(segment.text());
 
                     // 序列化元数据
                     String metadataJson = "{}";

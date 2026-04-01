@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import Dashboard from '@/pages/Dashboard'
 import Chat from '@/pages/Chat'
 import Documents from '@/pages/Documents'
+import DocumentChunks from '@/pages/DocumentChunks'
 import Templates from '@/pages/Templates'
 import Groups from '@/pages/Groups'
 import Users from '@/pages/Users'
@@ -53,6 +54,7 @@ function AppRoutes() {
       <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
       <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
       <Route path="/documents" element={<AdminRoute><Documents /></AdminRoute>} />
+      <Route path="/documents/:documentId/chunks" element={<AdminRoute><DocumentChunks /></AdminRoute>} />
       <Route path="/templates" element={<AdminRoute><Templates /></AdminRoute>} />
       <Route path="/team-chats" element={<AdminRoute><TeamChats /></AdminRoute>} />
       <Route path="/groups" element={<AdminRoute><Groups /></AdminRoute>} />

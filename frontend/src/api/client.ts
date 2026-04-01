@@ -14,6 +14,10 @@ import type {
   CreateUserRequest,
   ChatRequest,
   IngestUrlRequest,
+  ChunkDto,
+  UpdateChunkRequest,
+  MergeChunksRequest,
+  SplitChunkRequest,
 } from '@/types'
 
 const API_BASE = ((import.meta.env?.VITE_API_BASE_URL as string) || '/api').replace(/\/$/, '')
@@ -129,6 +133,39 @@ export const api = {
       method: 'POST',
       body: data,
       params: data.category ? { category: data.category } : undefined,
+    }),
+
+  // ==================== Chunks ====================
+  getChunksByDocumentId: (documentId: string) =>
+    request<ChunkDto[]>(`/chunks/document/${documentId}`),
+
+  getChunkById: (chunkId: string) =>
+    request<ChunkDto>(`/chunks/${chunkId}`),
+
+  updateChunk: (chunkId: string, data: UpdateChunkRequest) =>
+    request<ChunkDto>(`/chunks/${chunkId}`, {
+      method: 'PUT',
+      body: data,
+    }),
+
+  mergeChunks: (data: MergeChunksRequest) =>
+    request<ChunkDto>('/chunks/merge', {
+      method: 'POST',
+      body: data,
+    }),
+
+  splitChunk: (chunkId: string, data: SplitChunkRequest) =>
+    request<ChunkDto[]>(`/chunks/${chunkId}/split`, {
+      method: 'POST',
+      body: data,
+    }),
+
+  deleteChunk: (chunkId: string) =>
+    request(`/chunks/${chunkId}`, { method: 'DELETE' }),
+
+  reanalyzeChunk: (chunkId: string) =>
+    request<ChunkDto>(`/chunks/${chunkId}/reanalyze`, {
+      method: 'POST',
     }),
 
   // ==================== Conversations ====================

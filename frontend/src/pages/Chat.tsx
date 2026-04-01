@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Plus, MessageSquare, Trash2, Bot, User, FileText } from 'lucide-react'
+import { Send, Plus, MessageSquare, Trash2, Bot, User, FileText, ArrowUp } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -70,6 +70,23 @@ export default function Chat() {
   // Delete Confirmation State
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [chatToDelete, setChatToDelete] = useState<number | null>(null)
+
+  // Scroll to top button state
+  const [showScrollToTop, setShowScrollToTop] = useState(false)
+
+  // Handle scroll event for scroll-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollToTop(window.scrollY > 300)
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // Load initial data
   useEffect(() => {
@@ -688,6 +705,19 @@ export default function Chat() {
         title="删除对话？"
         description="此操作将永久删除该对话记录，无法找回。"
       />
+
+      {/* Scroll to Top Button */}
+      {showScrollToTop && (
+        <Button
+          variant="secondary"
+          size="icon"
+          className="fixed bottom-8 right-8 h-12 w-12 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 z-50"
+          onClick={scrollToTop}
+          title="返回顶部"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </Button>
+      )}
     </div>
   )
 }

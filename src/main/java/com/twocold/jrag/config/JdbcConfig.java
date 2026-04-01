@@ -16,6 +16,7 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
     @Override
     public List<Object> userConverters() {
         return Arrays.asList(
+            // PGvector converters
             new Converter<PGobject, PGvector>() {
                 @Override
                 public PGvector convert(PGobject source) {
@@ -42,7 +43,34 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
                     }
                     return jsonObject;
                 }
-            }
+            },
+            // JSONB to String converter (for source_meta field)
+                (Converter<PGobject, String>) source -> {
+                    if (source == null) {
+                        return null;
+                    }
+                    return source.getValue();
+                },
+                (Converter<String, PGobject>) source -> {
+                    if (source == null) {
+                        return null;
+                    }
+                    PGobject pgObject = new PGobject();
+                    pgObject.setType("jsonb");
+                    try {
+                        pgObject.setValue(source);
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+                    return pgObject;
+                },
+            // tsvector to String converter (for content_search field - read only)
+                (Converter<PGobject, String>) source -> {
+                    if (source == null) {
+                        return null;
+                    }
+                    return source.getValue();
+                }
         );
     }
 }

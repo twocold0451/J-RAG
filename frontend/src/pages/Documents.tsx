@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Upload, FileText, Search, Trash2, Loader2, Link, File } from 'lucide-react'
+import { Upload, FileText, Search, Trash2, Loader2, Link, File, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -14,10 +14,11 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { api } from '@/api/client'
 import { useToast } from '@/components/Toast'
 import { useDocumentProgress } from '@/hooks/useDocumentProgress'
+import { api } from '@/api/client'
 import type { DocumentDto } from '@/types'
+import { useNavigate } from 'react-router-dom'
 
 const statusMap: Record<string, { label: string; color: string }> = {
   PENDING: { label: '等待处理', color: 'bg-gray-100 text-gray-600' },
@@ -35,6 +36,7 @@ const categoryColors: Record<string, string> = {
 }
 
 export default function Documents() {
+  const navigate = useNavigate()
   const { showToast } = useToast()
   const [documents, setDocuments] = useState<DocumentDto[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -175,6 +177,10 @@ export default function Documents() {
     }
   }
 
+  const handleViewChunks = (doc: DocumentDto) => {
+    navigate(`/documents/${doc.id}/chunks`)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -305,6 +311,17 @@ export default function Documents() {
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
+                        {doc.status === 'COMPLETED' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 rounded-xl text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => handleViewChunks(doc)}
+                            title="查看切块"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

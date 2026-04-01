@@ -3,6 +3,7 @@ package com.twocold.jrag.domain;
 import com.pgvector.PGvector;
 import lombok.*;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.OffsetDateTime;
@@ -36,18 +37,15 @@ public class Chunk {
 
     private String contentKeywords;
 
+    @Transient
+    private String contentSearch;
+
     private OffsetDateTime createdAt;
 
-
-
     /**
-
      * 检索评分 (仅用于内存排序，不持久化)
-
      */
-
-    @org.springframework.data.annotation.Transient
-
+    @Transient
     private Double score;
 
 }

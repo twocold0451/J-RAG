@@ -1,3 +1,31 @@
+// ==================== Chunk Types ====================
+export interface ChunkDto {
+  id: string
+  documentId: string
+  content: string
+  contentVector?: number[]
+  chunkIndex: number
+  sourceMeta?: string
+  chunkerName?: string
+  contentKeywords?: string
+  createdAt?: string
+  score?: number
+}
+
+export interface UpdateChunkRequest {
+  content: string
+}
+
+export interface MergeChunksRequest {
+  chunk1Id: string
+  chunk2Id: string
+}
+
+export interface SplitChunkRequest {
+  part1: string
+  part2: string
+}
+
 // ==================== Auth Types ====================
 export interface UserResponse {
   id: number
