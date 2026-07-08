@@ -14,24 +14,25 @@ import com.twocold.jrag.repository.ConversationRepository;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.service.AiServices;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Qualifier;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
@@ -41,7 +42,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ChatService {
 
     private static final int MAX_CONTEXT_MESSAGES = 10;
@@ -58,6 +58,36 @@ public class ChatService {
     private final RagProperties ragProperties;
     private final PromptService promptService;
     private final ObjectMapper objectMapper;
+    private final Executor executor;
+    private final ChatModel chatModel;
+
+    public ChatService(ConversationRepository conversationRepository,
+                       ChatMessageRepository chatMessageRepository,
+                       StreamingChatModel openAiStreamingChatModel,
+                       JdbcTemplate jdbcTemplate,
+                       RetrievalService retrievalService,
+                       QueryRewriteService queryRewriteService,
+                       QueryDecompositionService queryDecompositionService,
+                       LangFuseService langFuseService,
+                       RagProperties ragProperties,
+                       PromptService promptService,
+                       ObjectMapper objectMapper,
+                       @Qualifier("searchExecutor") Executor executor,
+                       ChatModel chatModel) {
+        this.conversationRepository = conversationRepository;
+        this.chatMessageRepository = chatMessageRepository;
+        this.openAiStreamingChatModel = openAiStreamingChatModel;
+        this.jdbcTemplate = jdbcTemplate;
+        this.retrievalService = retrievalService;
+        this.queryRewriteService = queryRewriteService;
+        this.queryDecompositionService = queryDecompositionService;
+        this.langFuseService = langFuseService;
+        this.ragProperties = ragProperties;
+        this.promptService = promptService;
+        this.objectMapper = objectMapper;
+        this.executor = executor;
+        this.chatModel = chatModel;
+    }
 
     /**
      * 执行流式 RAG 对话
@@ -185,7 +215,8 @@ public class ChatService {
         // 使用 Sinks 桥接 LangChain4j 回调到 Flux
         return Flux.<ServerSentEvent<String>>create(sink -> {
             RagAgentTools tools = new RagAgentTools(
-                    retrievalService, queryDecompositionService, sink, ctx.associatedDocumentIds(), objectMapper);
+                    retrievalService, queryDecompositionService, sink, ctx.associatedDocumentIds(), objectMapper,
+                    chatModel, executor);
 
             DeepThinkingAgent agent = AiServices.builder(DeepThinkingAgent.class)
                     .streamingChatModel(openAiStreamingChatModel)
@@ -222,19 +253,38 @@ public class ChatService {
     private List<dev.langchain4j.data.message.ChatMessage> buildAgentMessages(ChatContext ctx) {
         List<dev.langchain4j.data.message.ChatMessage> messages = new ArrayList<>();
 
-        String systemPrompt = promptService.getPrompt("deep_thinking_agent", """
+        String baseSystemPrompt = promptService.getPrompt("deep_thinking_agent", """
                 你是一个具备深度思考能力的 RAG 智能助手。你的目标是利用可用工具准确回答用户的问题。
 
+                可用工具：
+                1. **searchKnowledgeBase** - 直接搜索知识库，适用于简单、单一的问题
+                2. **decomposeQuery** - 拆解复杂问题并执行搜索，适用于多部分、对比分析、需要多步推理的问题
+
                 请遵循以下思考流程 (ReAct)：
-                1. **Analyze (分析)**: 仔细分析用户的问题，判断是否需要拆解复杂问题或直接搜索。
-                2. **Act (行动)**: 根据分析结果，选择合适的工具（searchKnowledgeBase 或 decomposeQuery）。
+                1. **Analyze (分析)**: 判断问题是简单还是复杂：
+                   - 简单问题（单一意图、事实查询）→ 使用 searchKnowledgeBase
+                   - 复杂问题（多部分、对比、因果链）→ 使用 decomposeQuery（让工具自动处理拆解和依赖关系）
+                2. **Act (行动)**: **直接调用工具，不要在思考中自己拆解问题**。decomposeQuery 工具会智能分析依赖关系并分层执行。
                 3. **Observe (观察)**: 观察工具返回的结果。
                 4. **Reason (推理)**: 基于观察到的信息，判断是否足够回答用户问题。如果不够，决定下一步行动。
                 5. **Reply (回答)**: 当收集到足够信息后，综合整理并给出最终答案。
 
-                注意：优先使用事实数据回答，严禁编造年份，最终回答要条理清晰。
+                重要提示：
+                - **不要自己拆解问题**：即使问题看起来复杂，也不要在思考过程中列出子问题，直接调用 decomposeQuery 工具
+                - decomposeQuery 会自动处理子问题依赖关系，你只需要等待结果即可
+                - 优先使用事实数据回答，严禁编造年份，最终回答要条理清晰
                 """);
-        messages.add(SystemMessage.from(systemPrompt));
+
+        // 注入防重复调用指令
+        String enhancedPrompt = baseSystemPrompt + """
+
+                ## 重要约束
+                - **禁止重复调用**: 如果连续两次调用相同工具且参数相同，说明当前策略无效
+                - **空结果处理**: 如果工具返回空结果或错误，请尝试更换策略而非重复调用
+                - **强制中断规则**: 当检测到重复调用时，你必须立即停止工具调用，基于现有信息进行总结
+                """;
+
+        messages.add(SystemMessage.from(enhancedPrompt));
 
         ctx.latestMessages().stream()
                 .sorted(Comparator.comparing(ChatMessage::getCreatedAt))

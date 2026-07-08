@@ -1,6 +1,7 @@
 package com.twocold.jrag.config;
 
 import com.pgvector.PGvector;
+import com.twocold.jrag.domain.DocumentStatus;
 import org.postgresql.util.PGobject;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -78,6 +79,50 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
                         return null;
                     }
                     return source.getValue();
+                }
+            },
+            // DocumentStatus enum converters (for documents.status field)
+            new Converter<DocumentStatus, String>() {
+                @Override
+                public String convert(DocumentStatus source) {
+                    if (source == null) {
+                        return null;
+                    }
+                    return source.name();
+                }
+            },
+            new Converter<String, DocumentStatus>() {
+                @Override
+                public DocumentStatus convert(String source) {
+                    if (source == null) {
+                        return null;
+                    }
+                    return DocumentStatus.valueOf(source);
+                }
+            },
+            new Converter<DocumentStatus, PGobject>() {
+                @Override
+                public PGobject convert(DocumentStatus source) {
+                    if (source == null) {
+                        return null;
+                    }
+                    PGobject pgObject = new PGobject();
+                    pgObject.setType("document_status");
+                    try {
+                        pgObject.setValue(source.name());
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+                    return pgObject;
+                }
+            },
+            new Converter<PGobject, DocumentStatus>() {
+                @Override
+                public DocumentStatus convert(PGobject source) {
+                    if (source == null || source.getValue() == null) {
+                        return null;
+                    }
+                    return DocumentStatus.valueOf(source.getValue());
                 }
             }
         );

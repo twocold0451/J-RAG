@@ -65,7 +65,7 @@ public class LangFuseService {
             payload.put("batch", List.of(event));
 
             String jsonBody = objectMapper.writeValueAsString(payload);
-            log.debug("Sending Ingestion Event [{}] to LangFuse: {}", type, jsonBody);
+            //log.debug("Sending Ingestion Event [{}] to LangFuse: {}", type, jsonBody);
 
             restClient.post()
                     .uri("/api/public/ingestion")

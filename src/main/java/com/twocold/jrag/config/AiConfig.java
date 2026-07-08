@@ -6,9 +6,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
-// Keep import if needed elsewhere, otherwise remove. But remove unused imports is better.
-
-
+/**
+ * AI 模型配置
+ * 配置 LangChain4j 所需的各种模型 Bean
+ */
 @Configuration
 public class AiConfig {
 
